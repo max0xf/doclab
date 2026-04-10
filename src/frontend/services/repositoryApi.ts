@@ -27,17 +27,29 @@ export const repositoryApi = {
       try {
         const params = new URLSearchParams({
           provider: token.service_type,
-          base_url: token.base_url || '',
           page: '1',
           per_page: limit ? limit.toString() : '100',
         });
 
+        // Only add base_url if it's not empty
+        if (token.base_url) {
+          params.append('base_url', token.base_url);
+        }
+
+        console.log(`Fetching repos from ${token.service_type} with params:`, params.toString());
+
         const response = await apiClient.request<ListResponse<Repository>>(
           `/api/git-provider/v1/repositories/?${params.toString()}`
         );
+
+        console.log(`Received ${response.items?.length || 0} repos from ${token.service_type}`);
         allRepos.push(...(response.items || []));
       } catch (error) {
         console.error(`Failed to fetch repos from ${token.service_type}:`, error);
+        // Log the full error for debugging
+        if (error instanceof Error) {
+          console.error('Error details:', error.message);
+        }
       }
     }
 

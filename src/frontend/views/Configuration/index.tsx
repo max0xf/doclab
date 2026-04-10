@@ -45,7 +45,10 @@ export default function Configuration() {
       return {
         service: serviceName,
         serviceType,
-        baseUrl: token.base_url || '',
+        baseUrl:
+          serviceType === 'custom_header'
+            ? token.header_name || 'X-Zero-Trust-Token'
+            : token.base_url || '',
         username: token.username || (serviceType === 'custom_header' ? 'ZTA Token' : ''),
         token: '••••••••••',
         status: 'configured',
@@ -88,21 +91,22 @@ export default function Configuration() {
         service_type: row.serviceType,
       };
 
-      if (editForm.baseUrl) {
-        data.base_url = editForm.baseUrl;
-      }
-
-      if (editForm.username && row.serviceType !== 'custom_header') {
-        data.username = editForm.username;
+      if (row.serviceType === 'custom_header') {
+        // For custom tokens, use the baseUrl field as the header name
+        data.header_name = editForm.baseUrl || 'X-Zero-Trust-Token';
+        data.name = 'ZTA Token';
+      } else {
+        // For other services, use base_url normally
+        if (editForm.baseUrl) {
+          data.base_url = editForm.baseUrl;
+        }
+        if (editForm.username) {
+          data.username = editForm.username;
+        }
       }
 
       if (editForm.token) {
         data.token = editForm.token;
-      }
-
-      if (row.serviceType === 'custom_header') {
-        data.header_name = 'X-Zero-Trust-Token';
-        data.name = 'ZTA Token';
       }
 
       await serviceTokensApi.save(data);
