@@ -1,0 +1,56 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# Backend repository (separate git repo)
+/src/backend/
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+openspec/changes/archive/*
+openspec/changes/*
+openspec/changes
+
+# testing
+/coverage
+.coverage
+
+# production
+/build
+
+# misc
+.DS_Store
+.env
+.env.local
+.env.dev
+.env.development.local
+.env.test.local
+.env.production.local
+.env.secrets
+.env.private
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+
+# Python / Django
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+server/venv/
+server/data/
+*.sqlite3
+*.db
+cyber-wiki-*.tar.gz
+
+local-analysis/
+test-results/
+*.log
+*.txt
+server/.coverage
+.claude/settings.local.json

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/frontend/index.tsx",
+    "src/frontend/setupTests.ts",
+    "src/frontend/react-app-env.d.ts",
+    "jest.config.js",
+    "playwright.config.ts",
+    "tailwind.config.js",
+    "postcss.config.js"
+  ],
+  "project": [
+    "src/frontend/**/*.{ts,tsx,js,jsx}"
+  ],
+  "ignore": [
+    "**/*.test.{ts,tsx,js,jsx}",
+    "**/*.spec.{ts,tsx,js,jsx}",
+    "src/frontend/tests/**",
+    "build/**",
+    "public/**",
+    "src/backend/**"
+  ],
+  "ignoreDependencies": [
+    "@types/node",
+    "@types/jest",
+    "@testing-library/react",
+    "@testing-library/user-event",
+    "@testing-library/dom",
+    "eslint-config-prettier",
+    "eslint-plugin-prettier",
+    "eslint-plugin-testing-library",
+    "lint-staged",
+    "jest-environment-jsdom",
+    "ts-jest",
+    "patch-package",
+    "react",
+    "react-dom",
+    "lucide-react",
+    "@acronis-platform/ui-syntax",
+    "react-markdown",
+    "remark-gfm",
+    "@tanstack/react-virtual",
+    "memoize-one"
+  ],
+  "ignoreBinaries": [
+    "eslint",
+    "python",
+    "jest",
+    "react-scripts",
+    "patch-package"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "includeEntryExports": false
+}

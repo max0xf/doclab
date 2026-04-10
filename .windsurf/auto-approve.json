@@ -1,0 +1,31 @@
+{
+  "autoApprove": {
+    "enabled": true,
+    "allowedCommands": [
+      "npm run lint",
+      "npm run lint:fix",
+      "npm run format",
+      "npm run format:check",
+      "npm run lint:specs",
+      "npm run lint:specs:fix",
+      "npm run test",
+      "npm run test:coverage",
+      "npm run test:ci",
+      "npm run build",
+      "npm run knip",
+      "npm run knip:production",
+      "npm audit --audit-level=high",
+      "nvm use",
+      "git status",
+      "git diff",
+      "git log"
+    ],
+    "allowedPatterns": [
+      "^npm run test -- .*\\.test\\.(ts|tsx)$",
+      "^npm run lint -- --fix$",
+      "^find src -type f.*",
+      "^grep -E.*package\\.json$"
+    ],
+    "description": "Commands that are safe to run automatically without user approval"
+  }
+}

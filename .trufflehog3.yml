@@ -1,0 +1,12 @@
+rules:
+  - rule: entropy
+    min: 3.5
+  - rule: hex_high_entropy_string
+    min: 3.0
+  - rule: base64_high_entropy_string
+    min: 4.5
+exclude_entropy:
+  - DJANGO_SECRET_KEY
+  - OIDC_CLIENT_SECRET
+  - GIT_API_TOKEN
+  - JIRA_API_TOKEN

@@ -1,0 +1,6 @@
+{
+  "count": 0,
+  "description": "Maximum allowed eslint-disable directives in src/frontend/**/*.{ts,tsx,js,jsx}",
+  "lastUpdated": "2026-03-24",
+  "note": "Project starts with zero eslint-disable directives."
+}

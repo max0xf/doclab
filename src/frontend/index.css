@@ -1,0 +1,159 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Light theme (default) - Bitbucket-inspired with lighter tones */
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f8fa;
+  --bg-tertiary: #ebf2f9;
+  --text-primary: #172b4d;
+  --text-secondary: #5e6c84;
+  --text-muted: #8993a4;
+  --border-color: #dfe1e6;
+  --card-bg: #ffffff;
+  --card-border: #dfe1e6;
+  --primary: #0052cc;
+  --primary-hover: #0747a6;
+  --primary-light: #deebff;
+  --accent: #00875a;
+  --accent-hover: #006644;
+}
+
+/* White theme - pure white background */
+.theme-white {
+  --bg-primary: #ffffff;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #ffffff;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-muted: #6b7280;
+  --border-color: #e5e7eb;
+  --card-bg: #ffffff;
+  --card-border: #e5e7eb;
+}
+
+/* White theme specific overrides */
+.theme-white .bg-gray-50 {
+  background-color: #ffffff;
+}
+
+.theme-white .bg-gray-100 {
+  background-color: #f9fafb;
+}
+
+/* Sidebar colors - Light theme (Bitbucket-inspired light sidebar) */
+:root {
+  --sidebar-bg: #ffffff;
+  --sidebar-bg-solid: #ffffff;
+  --sidebar-header-bg: #f5f8fa;
+  --sidebar-border: #dfe1e6;
+  --sidebar-divider: #dfe1e6;
+  --sidebar-active: #deebff;
+  --sidebar-hover: #f5f8fa;
+  --sidebar-text: #5e6c84;
+  --sidebar-text-active: #0052cc;
+  --sidebar-text-hover: #172b4d;
+  --sidebar-header-text: #172b4d;
+  --header-bg: #f5f8fa;
+  --header-bg-loading: #ebf2f9;
+  --header-button-bg: #ebf2f9;
+}
+
+/* White theme - light sidebar with blue hover/active */
+.theme-white {
+  --sidebar-bg: #ffffff;
+  --sidebar-bg-solid: #ffffff;
+  --sidebar-header-bg: #ffffff;
+  --sidebar-border: #e5e7eb;
+  --sidebar-divider: #e5e7eb;
+  --sidebar-active: hsl(205deg 100% 96%);
+  --sidebar-hover: hsl(205deg 100% 97%);
+  --sidebar-text: #4b5563;
+  --sidebar-text-active: hsl(205deg 80% 45%);
+  --sidebar-text-hover: hsl(205deg 80% 45%);
+  --sidebar-header-text: #111827;
+  --header-bg: hsl(145deg 63% 35%);
+  --header-bg-loading: hsl(210deg 80% 50%);
+  --header-button-bg: hsl(145deg 63% 30%);
+}
+
+html {
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  overflow-x: hidden;
+  font-family: var(--acv-base-font-family-inter);
+  font-size: var(--acv-base-font-size-14);
+  line-height: var(--acv-base-font-line-height-20);
+  color: var(--text-primary);
+  background-color: var(--bg-secondary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+code {
+  font-family: var(--acv-base-font-family-mono);
+}
+
+@layer components {
+  .card {
+    background-color: var(--card-bg);
+    border-color: var(--card-border);
+    color: var(--text-primary);
+    @apply rounded-xl shadow-sm border p-4 md:p-6 transition-all;
+  }
+
+  .stat-card {
+    background-color: var(--card-bg);
+    border-color: var(--card-border);
+    color: var(--text-primary);
+    @apply rounded-xl shadow-sm border p-4 hover:shadow-md transition-all cursor-pointer;
+  }
+
+  .btn-primary {
+    @apply text-white px-4 py-2 rounded-md hover:shadow-md transition-all font-medium;
+    background-color: var(--primary);
+  }
+
+  .btn-primary:hover {
+    background-color: var(--primary-hover);
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 rounded-md transition-all font-medium border;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+  }
+
+  .btn-secondary:hover {
+    background-color: var(--bg-secondary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-success {
+    @apply bg-green-100 text-green-800;
+  }
+
+  .badge-warning {
+    @apply bg-yellow-100 text-yellow-800;
+  }
+
+  .badge-info {
+    @apply bg-blue-100 text-blue-800;
+  }
+
+  .badge-danger {
+    @apply bg-red-100 text-red-800;
+  }
+}

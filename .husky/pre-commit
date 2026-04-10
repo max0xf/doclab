@@ -1,0 +1,70 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+set -e
+
+echo "Checking for misplaced test files..."
+MISPLACED_TESTS=$(find src/frontend -type f \( -name "*.test.ts" -o -name "*.test.tsx" -o -name "*.spec.ts" -o -name "*.spec.tsx" \) ! -path "src/frontend/tests/*")
+if [ -n "$MISPLACED_TESTS" ]; then
+  echo "❌ Error: Test files found outside of src/frontend/tests directory:"
+  echo "$MISPLACED_TESTS"
+  echo ""
+  echo "Please move these test files to src/frontend/tests/"
+  exit 1
+fi
+echo "✓ All test files are in the correct location"
+
+echo "Running specs lint..."
+npm run lint:specs
+
+echo "Running format..."
+npm run format
+
+echo "Running lint code..."
+npm run lint
+
+echo "Checking eslint-disable directives..."
+./scripts/check-eslint-disables.sh
+
+echo "Running type-check..."
+npm run type-check
+
+echo "Running UI tests with coverage..."
+npm run test:ci
+
+echo "Running build..."
+npm run build
+
+# Commented out to prevent app startup during commits
+# echo "Testing application startup on port 8888..."
+# if command -v lsof &> /dev/null; then
+#   ./scripts/run-precommit-test.sh
+# else
+#   echo "Skipping startup test (lsof not available)"
+# fi
+
+echo "Running backend tests with coverage..."
+(
+  cd src/backend
+  if [ -f ".env" ]; then
+    export $(grep -v '^#' .env | xargs)
+  fi
+  export DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY:-test-secret-key-for-ci}"
+  if [ -f "venv/bin/python" ]; then
+    venv/bin/python -m pytest
+  elif [ -f "venv/Scripts/python.exe" ]; then
+    venv/Scripts/python.exe -m pytest
+  else
+    echo "Error: src/backend/venv not found. Backend tests could not be run."
+    exit 1
+  fi
+)
+
+echo "Running Knip (unused code detection)..."
+npm run knip
+
+echo "Running Knip (unused code detection) in production mode..."
+npm run knip:production
+
+echo "Running audit..."
+npm audit --audit-level=high

@@ -1,0 +1,10 @@
+node_modules
+build
+dist
+coverage
+*.config.js
+public
+scripts
+.git
+src/backend/**/*.py
+**/*.py

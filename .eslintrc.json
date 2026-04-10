@@ -1,0 +1,47 @@
+{
+    "extends": [
+        "react-app",
+        "plugin:prettier/recommended",
+        "prettier"
+    ],
+    "plugins": [
+        "prettier",
+        "jest",
+        "testing-library"
+    ],
+    "rules": {
+        "prettier/prettier": "error",
+        "@typescript-eslint/no-unused-vars": [
+            "error",
+            {
+                "argsIgnorePattern": "^_",
+                "varsIgnorePattern": "^_"
+            }
+        ],
+        "@typescript-eslint/no-explicit-any": "off",
+        "no-console": "off",
+        "react-hooks/exhaustive-deps": "error",
+        "curly": ["error", "all"]
+    },
+    "overrides": [
+        {
+            "files": ["src/frontend/tests/unit/**/*.test.ts", "src/frontend/tests/unit/**/*.test.tsx"],
+            "extends": ["plugin:jest/recommended", "plugin:testing-library/react"],
+            "rules": {
+                "jest/no-disabled-tests": "error",
+                "jest/no-focused-tests": "error",
+                "testing-library/no-container": "error",
+                "testing-library/no-node-access": "error",
+                "testing-library/prefer-screen-queries": "error",
+                "testing-library/no-wait-for-multiple-assertions": "error",
+                "no-restricted-syntax": [
+                    "error",
+                    {
+                        "selector": "CallExpression[callee.name='waitFor'] > ObjectExpression > Property[key.name='timeout']",
+                        "message": "Explicit timeout in waitFor is forbidden. Fix the test to work within the default timeout (500ms). If the test needs async data, ensure mocks resolve immediately."
+                    }
+                ]
+            }
+        }
+    ]
+}
