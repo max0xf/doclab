@@ -3,6 +3,9 @@
 # Backend repository (separate git repo)
 /src/backend/
 
+# Specs repository (separate git repo)
+/specs/
+
 # dependencies
 /node_modules
 /.pnp

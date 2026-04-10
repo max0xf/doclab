@@ -7,6 +7,10 @@
     {
       "name": "doclab-back (backend)",
       "path": "src/backend"
+    },
+    {
+      "name": "specs (cyber-wiki)",
+      "path": "specs"
     }
   ],
   "settings": {
