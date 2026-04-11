@@ -1,28 +1,31 @@
 import React, { useState, useEffect } from 'react';
+import { projectApi, Project } from '../../services/projectApi';
 import { repositoryApi } from '../../services/repositoryApi';
-import { Repository, Urls } from '../../types';
-import { Settings } from 'lucide-react';
-import RepositoryList from './RepositoryList';
+import { serviceTokensApi } from '../../services/serviceTokensApi';
+import { Repository } from '../../types';
+import { ChevronRight, ChevronDown, Folder, Search, Loader, Star, Settings } from 'lucide-react';
 import RepositoryDetail from './RepositoryDetail';
 
+interface ProjectWithRepos extends Project {
+  repositories?: Repository[];
+  isExpanded?: boolean;
+  isLoadingRepos?: boolean;
+}
+
 export default function Repositories() {
-  const [repositories, setRepositories] = useState<Repository[]>([]);
+  const [projects, setProjects] = useState<ProjectWithRepos[]>([]);
   const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [hasToken, setHasToken] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
   const [favorites, setFavorites] = useState<Array<{ id: number; repository_id: string }>>([]);
-  const [recentRepos, setRecentRepos] = useState<Array<{ id: number; repository_id: string }>>([]);
   const [repoIdFromUrl, setRepoIdFromUrl] = useState<string | null>(null);
-  const [initialFilter, setInitialFilter] = useState<string | null>(null);
-  const [allReposLoaded, setAllReposLoaded] = useState(false);
-  const [isLoadingAll, setIsLoadingAll] = useState(false);
+  const [provider, setProvider] = useState<{ type: string; baseUrl: string } | null>(null);
 
   // Parse URL and update state when hash changes
   useEffect(() => {
     const parseUrl = () => {
       const urlParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
-      setInitialFilter(urlParams.get('filter'));
       setRepoIdFromUrl(urlParams.get('repo'));
     };
 
@@ -34,249 +37,147 @@ export default function Repositories() {
   }, []);
 
   useEffect(() => {
-    // Load favorites and recent repos from database
+    // Load favorites from database
     const loadUserPreferences = async () => {
       try {
-        // Load both favorites and recent in parallel
-        const [favs, recent] = await Promise.all([
-          repositoryApi.getFavorites(),
-          repositoryApi.getRecent(),
-        ]);
-
+        const favs = await repositoryApi.getFavorites();
         setFavorites(favs);
-        setRecentRepos(recent);
 
-        // Only auto-navigate on very first load (when URL is empty or just root)
-        const currentHash = window.location.hash;
-        const isInitialLoad = !currentHash || currentHash === '#' || currentHash === '#/';
-
-        if (!repoIdFromUrl && isInitialLoad) {
-          // This is initial app load with no navigation - auto-select a repo
-          // Priority: 1. Most recent, 2. First favorite, 3. Show repository list
-          if (recent.length > 0) {
-            // Open most recent repo
-            const mostRecentId = recent[0].repository_id;
-            window.location.hash = `${Urls.Repositories}?repo=${mostRecentId}`;
-            setIsLoading(false);
-            return;
-          } else if (favs.length > 0) {
-            // Open first favorite repo
-            const firstFavoriteId = favs[0].repository_id;
-            window.location.hash = `${Urls.Repositories}?repo=${firstFavoriteId}`;
-            setIsLoading(false);
-            return;
-          }
-        }
-
-        // If no repo in URL, load repository list
+        // If repo in URL, load it
         if (!repoIdFromUrl) {
-          loadRepositories();
+          loadProjects();
         }
       } catch (e) {
         console.error('Failed to load user preferences', e);
-        // On error, load all repositories
-        loadRepositories();
+        loadProjects();
       }
     };
 
     loadUserPreferences();
   }, [repoIdFromUrl]);
 
-  const loadRepositories = async (loadAll: boolean = false) => {
-    if (loadAll) {
-      setIsLoadingAll(true);
-    }
+  const loadProjects = async () => {
+    setIsLoading(true);
+    setError(null);
+
     try {
-      const limit = loadAll ? 0 : 100;
-      const data = await repositoryApi.list(limit);
-      setRepositories(data);
-      setAllReposLoaded(loadAll);
-      // Don't auto-select any repo - just show the list
-      setHasToken(true);
-      setError(null);
+      // Get service tokens to find git provider
+      const tokens = await serviceTokensApi.list();
+      const gitToken = tokens.find(
+        t => t.service_type === 'github' || t.service_type === 'bitbucket_server'
+      );
+
+      if (!gitToken) {
+        setError('No git provider configured. Please configure in Configuration page.');
+        setIsLoading(false);
+        return;
+      }
+
+      setProvider({ type: gitToken.service_type, baseUrl: gitToken.base_url });
+
+      // Load projects
+      const projectsList = await projectApi.list(gitToken.service_type, gitToken.base_url);
+      setProjects(projectsList.map(p => ({ ...p, isExpanded: false, isLoadingRepos: false })));
     } catch (err: any) {
-      // Try to parse the error response
-      let errorDetail = 'Failed to load repositories';
-      let isAuthError = false;
-
-      if (err?.message) {
-        const message = err.message.toLowerCase();
-        if (
-          message.includes('401') ||
-          message.includes('unauthorized') ||
-          message.includes('authentication')
-        ) {
-          isAuthError = true;
-          errorDetail =
-            'Authentication failed. Please check your Git token and URL in profile settings.';
-        } else if (message.includes('404') || message.includes('not found')) {
-          errorDetail =
-            'Git provider endpoint not found. Please check your URL configuration in profile settings.';
-        } else {
-          errorDetail = err.message;
-        }
-      }
-
-      if (isAuthError) {
-        setHasToken(false);
-      } else {
-        setError(errorDetail);
-      }
+      console.error('Failed to load projects:', err);
+      setError(err.detail || err.message || 'Failed to load projects');
     } finally {
       setIsLoading(false);
-      setIsLoadingAll(false);
     }
   };
 
-  const saveFavorites = async (newFavorites: Array<{ id: number; repository_id: string }>) => {
-    setFavorites(newFavorites);
-    // Dispatch custom event to update sidebar
-    window.dispatchEvent(new Event('repositoriesUpdated'));
+  const toggleProject = async (projectKey: string) => {
+    const project = projects.find(p => p.key === projectKey);
+    if (!project) {
+      return;
+    }
+
+    // If already expanded, just collapse
+    if (project.isExpanded) {
+      setProjects(projects.map(p => (p.key === projectKey ? { ...p, isExpanded: false } : p)));
+      return;
+    }
+
+    // If repos not loaded yet, load them
+    if (!project.repositories && provider) {
+      setProjects(projects.map(p => (p.key === projectKey ? { ...p, isLoadingRepos: true } : p)));
+
+      try {
+        const repos = await projectApi.listRepositories(
+          provider.type,
+          provider.baseUrl,
+          projectKey
+        );
+        setProjects(
+          projects.map(p =>
+            p.key === projectKey
+              ? { ...p, repositories: repos, isExpanded: true, isLoadingRepos: false }
+              : p
+          )
+        );
+      } catch (err) {
+        console.error(`Failed to load repos for ${projectKey}:`, err);
+        setProjects(
+          projects.map(p => (p.key === projectKey ? { ...p, isLoadingRepos: false } : p))
+        );
+      }
+    } else {
+      // Repos already loaded, just expand
+      setProjects(projects.map(p => (p.key === projectKey ? { ...p, isExpanded: true } : p)));
+    }
   };
 
   const toggleFavorite = async (repoId: string) => {
-    console.log('toggleFavorite called for:', repoId);
-    console.log('Current favorites:', favorites);
     const existingFavorite = favorites.find(f => f.repository_id === repoId);
-    console.log('Is currently favorite?', !!existingFavorite);
 
     try {
       if (existingFavorite) {
-        console.log('Removing from favorites...');
         await repositoryApi.removeFavorite(existingFavorite.id);
-        const newFavorites = favorites.filter(f => f.repository_id !== repoId);
-        console.log('New favorites after remove:', newFavorites);
-        saveFavorites(newFavorites);
+        setFavorites(favorites.filter(f => f.repository_id !== repoId));
       } else {
-        console.log('Adding to favorites...');
         const newFavorite = await repositoryApi.addFavorite(repoId);
-        const newFavorites = [...favorites, newFavorite];
-        console.log('New favorites after add:', newFavorites);
-        saveFavorites(newFavorites);
+        setFavorites([...favorites, newFavorite]);
       }
     } catch (error) {
       console.error('Failed to toggle favorite:', error);
     }
   };
 
-  const handleSelectRepo = React.useCallback(async (repo: Repository) => {
+  const handleRepoClick = (repo: Repository) => {
     setSelectedRepo(repo);
-    // Recent repos are auto-tracked by backend, just refresh the list
-    try {
-      const recent = await repositoryApi.getRecent();
-      setRecentRepos(recent);
-      window.dispatchEvent(new Event('repositoriesUpdated'));
-    } catch (error) {
-      console.error('Failed to refresh recent repos:', error);
-    }
-  }, []);
+    window.location.hash = `#/repositories?repo=${repo.id}`;
 
-  const handleBackToList = () => {
-    setSelectedRepo(null);
-    // Clear repo from URL to show list
-    window.location.hash = Urls.Repositories;
-    // Load repositories when going back to list
-    if (repositories.length === 0) {
-      loadRepositories();
+    // Track as recent (if method exists)
+    if ('addRecent' in repositoryApi) {
+      (repositoryApi as any).addRecent(repo.id).catch((err: any) => {
+        console.error('Failed to add to recent:', err);
+      });
     }
   };
 
-  // If repo ID is in URL, fetch and display that specific repo
-  useEffect(() => {
-    if (repoIdFromUrl) {
-      const loadSpecificRepo = async () => {
-        try {
-          setIsLoading(true);
-          const repo = await repositoryApi.getById(repoIdFromUrl);
-          setSelectedRepo(repo);
-          setHasToken(true);
-          setError(null);
+  const handleBackToList = () => {
+    setSelectedRepo(null);
+    window.location.hash = '#/repositories';
+  };
 
-          // Refresh recent repos (auto-tracked by backend)
-          const recent = await repositoryApi.getRecent();
-          setRecentRepos(recent);
-          window.dispatchEvent(new Event('repositoriesUpdated'));
-        } catch (err: any) {
-          console.error('Failed to load repository:', err);
-          setError('Failed to load repository. It may not exist or you may not have access.');
-        } finally {
-          setIsLoading(false);
-        }
-      };
+  // Filter projects and repos by search query
+  const filteredProjects = projects.filter(project => {
+    const projectMatches =
+      project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      project.key.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      project.description?.toLowerCase().includes(searchQuery.toLowerCase());
 
-      loadSpecificRepo();
-    } else {
-      // No repo in URL, clear selection to show list
-      setSelectedRepo(null);
-    }
-  }, [repoIdFromUrl]);
+    const repoMatches =
+      project.repositories?.some(
+        repo =>
+          repo.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          repo.description?.toLowerCase().includes(searchQuery.toLowerCase())
+      ) || false;
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <div
-            className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 mb-4"
-            style={{ borderColor: 'var(--primary)' }}
-          ></div>
-          <p className="text-lg font-medium" style={{ color: 'var(--text-primary)' }}>
-            Loading repositories...
-          </p>
-          <p className="text-sm mt-2" style={{ color: 'var(--text-secondary)' }}>
-            Please wait while we fetch your repositories
-          </p>
-        </div>
-      </div>
-    );
-  }
+    return projectMatches || repoMatches;
+  });
 
-  if (!hasToken) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="max-w-md text-center">
-          <Settings size={48} className="mx-auto mb-4 text-text-secondary" />
-          <h2 className="text-xl font-bold mb-2">Git Configuration Required</h2>
-          <p className="text-text-secondary mb-6">
-            You need to configure your Git provider settings to access repositories. Please go to
-            your profile settings to configure your Git provider, URL, and token.
-          </p>
-          <a
-            href="#profile"
-            className="inline-block bg-primary text-white px-6 py-2 rounded font-medium hover:bg-primary-hover"
-          >
-            Go to Profile Settings
-          </a>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="max-w-md text-center">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-4">
-            <h2 className="text-xl font-bold mb-2 text-red-800">Error Loading Repositories</h2>
-            <p className="text-red-700 mb-4">{error}</p>
-          </div>
-          <button
-            onClick={() => loadRepositories(false)}
-            className="inline-block bg-primary text-white px-6 py-2 rounded font-medium hover:bg-primary-hover mr-2"
-          >
-            Retry
-          </button>
-          <a
-            href="#profile"
-            className="inline-block bg-gray-200 text-gray-800 px-6 py-2 rounded font-medium hover:bg-gray-300"
-          >
-            Go to Profile Settings
-          </a>
-        </div>
-      </div>
-    );
-  }
-
-  // Show repository detail if a repo is selected (from favorites/recent or list)
+  // Show repository detail if a repo is selected
   if (selectedRepo) {
     return (
       <RepositoryDetail
@@ -289,33 +190,185 @@ export default function Repositories() {
     );
   }
 
-  // Show "No Repositories" only if no repo is selected and repositories array is empty
-  if (repositories.length === 0) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="max-w-md text-center">
+        <div className="text-center">
+          <Loader className="animate-spin mx-auto mb-4" size={48} />
+          <p className="text-text-secondary">Loading projects...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="max-w-2xl text-center px-4">
           <Settings size={48} className="mx-auto mb-4 text-text-secondary" />
-          <h2 className="text-xl font-bold mb-2">No Repositories Found</h2>
-          <p className="text-text-secondary">
-            No repositories are available. Check your token permissions or contact your
-            administrator.
-          </p>
+          <h2 className="text-xl font-bold mb-2">Error Loading Projects</h2>
+          <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-left">
+            <p className="text-red-800 font-semibold mb-2">Error</p>
+            <p className="text-red-700 whitespace-pre-line">{error}</p>
+            <p className="text-red-600 text-sm mt-3">
+              Please update your tokens in the{' '}
+              <a href="#/configuration" className="underline font-semibold">
+                Configuration page
+              </a>
+              .
+            </p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <RepositoryList
-      repositories={repositories}
-      favorites={favorites}
-      recentRepos={recentRepos}
-      onSelectRepo={handleSelectRepo}
-      onToggleFavorite={toggleFavorite}
-      initialFilter={initialFilter}
-      allReposLoaded={allReposLoaded}
-      isLoadingAll={isLoadingAll}
-      onLoadAll={() => loadRepositories(true)}
-    />
+    <div className="h-full flex flex-col">
+      {/* Header */}
+      <div className="p-6 border-b border-border bg-surface">
+        <h1 className="text-2xl font-bold mb-4">Repositories</h1>
+
+        {/* Search */}
+        <div className="relative">
+          <Search
+            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-text-secondary"
+            size={20}
+          />
+          <input
+            type="text"
+            placeholder="Search projects and repositories..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-surface"
+          />
+        </div>
+
+        <p className="text-sm text-text-secondary mt-2">
+          {filteredProjects.length} project{filteredProjects.length !== 1 ? 's' : ''}
+        </p>
+      </div>
+
+      {/* Projects Table */}
+      <div className="flex-1 overflow-auto">
+        {filteredProjects.length === 0 ? (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-text-secondary">No projects or repositories found</p>
+          </div>
+        ) : (
+          <table className="w-full">
+            <thead className="bg-surface-secondary sticky top-0 z-10">
+              <tr className="border-b border-border">
+                <th className="text-left px-6 py-3 text-sm font-semibold text-text-secondary">
+                  Project / Repository
+                </th>
+                <th className="text-left px-6 py-3 text-sm font-semibold text-text-secondary">
+                  Key
+                </th>
+                <th className="text-left px-6 py-3 text-sm font-semibold text-text-secondary">
+                  Description
+                </th>
+                <th className="text-center px-6 py-3 text-sm font-semibold text-text-secondary w-24">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredProjects.map(project => (
+                <React.Fragment key={project.key}>
+                  {/* Project Row */}
+                  <tr className="border-b border-border hover:bg-surface-hover">
+                    <td className="px-6 py-3">
+                      <button
+                        onClick={() => toggleProject(project.key)}
+                        className="flex items-center gap-2 text-left w-full"
+                      >
+                        {project.isLoadingRepos ? (
+                          <Loader className="animate-spin flex-shrink-0" size={16} />
+                        ) : project.isExpanded ? (
+                          <ChevronDown className="flex-shrink-0" size={16} />
+                        ) : (
+                          <ChevronRight className="flex-shrink-0" size={16} />
+                        )}
+                        <Folder className="flex-shrink-0 text-primary" size={18} />
+                        <span className="font-semibold">{project.name}</span>
+                      </button>
+                    </td>
+                    <td className="px-6 py-3">
+                      <span className="text-xs font-mono text-text-secondary">{project.key}</span>
+                    </td>
+                    <td className="px-6 py-3">
+                      <span className="text-sm text-text-secondary truncate max-w-md block">
+                        {project.description || '—'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-3 text-center">
+                      {project.repositories && (
+                        <span className="text-xs text-text-secondary">
+                          {project.repositories.length} repo
+                          {project.repositories.length !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+
+                  {/* Repository Rows (when expanded) */}
+                  {project.isExpanded &&
+                    project.repositories &&
+                    project.repositories
+                      .filter(
+                        repo =>
+                          !searchQuery ||
+                          repo.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          repo.description?.toLowerCase().includes(searchQuery.toLowerCase())
+                      )
+                      .map(repo => (
+                        <tr
+                          key={repo.id}
+                          className="border-b border-border hover:bg-surface-hover bg-surface-secondary"
+                        >
+                          <td className="px-6 py-2 pl-16">
+                            <button
+                              onClick={() => handleRepoClick(repo)}
+                              className="flex items-center gap-2 text-left hover:text-primary"
+                            >
+                              <span className="font-medium">{repo.name}</span>
+                            </button>
+                          </td>
+                          <td className="px-6 py-2">
+                            <span className="text-xs font-mono text-text-secondary">{repo.id}</span>
+                          </td>
+                          <td className="px-6 py-2">
+                            <span className="text-sm text-text-secondary truncate max-w-md block">
+                              {repo.description || '—'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-2 text-center">
+                            <button
+                              onClick={e => {
+                                e.stopPropagation();
+                                toggleFavorite(repo.id);
+                              }}
+                              className="p-1 hover:bg-surface-hover rounded"
+                            >
+                              <Star
+                                size={16}
+                                className={
+                                  favorites.some(f => f.repository_id === repo.id)
+                                    ? 'fill-yellow-400 text-yellow-400'
+                                    : 'text-text-secondary'
+                                }
+                              />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
   );
 }

@@ -6,6 +6,7 @@ export enum Urls {
   Dashboard = 'dashboard',
   Repositories = 'repositories',
   Spaces = 'spaces',
+  SpaceConfiguration = 'space-configuration',
   DocumentEditor = 'doc',
   Search = 'search',
   ChangeHistory = 'history',
@@ -71,10 +72,146 @@ export interface Repository {
 }
 
 // =============================================================================
-// Spaces
+// Spaces (v2 - Confluence-like Architecture)
 // =============================================================================
 
+export enum SpaceVisibility {
+  Private = 'private',
+  Team = 'team',
+  Public = 'public',
+}
+
+export enum SpacePermissionRole {
+  Viewer = 'viewer',
+  Editor = 'editor',
+  Admin = 'admin',
+}
+
+export enum GitProvider {
+  GitHub = 'github',
+  BitbucketServer = 'bitbucket_server',
+  LocalGit = 'local_git',
+}
+
 export interface Space {
+  id: number;
+  slug: string;
+  name: string;
+  description: string;
+
+  // Ownership
+  owner: number;
+  owner_username: string;
+  created_by: number | null;
+  created_by_username: string | null;
+
+  // Visibility
+  visibility: SpaceVisibility;
+  is_public: boolean; // Legacy field
+
+  // Git Integration
+  git_provider: GitProvider | null;
+  git_base_url: string | null;
+  git_project_key: string | null;
+  git_repository_id: string | null;
+  git_repository_name: string | null;
+  git_default_branch: string;
+
+  // Metadata
+  page_count: number;
+  created_at: string;
+  updated_at: string;
+  last_synced_at: string | null;
+}
+
+export interface SpacePermission {
+  id: number;
+  space: number;
+  spaceName: string;
+  user: number;
+  userUsername: string;
+  userEmail: string;
+  role: SpacePermissionRole;
+  grantedBy: number | null;
+  grantedByUsername: string | null;
+  createdAt: string;
+}
+
+export interface SpaceConfiguration {
+  id: number;
+  space: number;
+  spaceSlug: string;
+  spaceName: string;
+
+  // Configuration objects
+  fileTreeConfig: {
+    rootPath?: string;
+    fileExtensions?: string[];
+    ignorePatterns?: string[];
+    titleFromFrontmatter?: boolean;
+    titleField?: string;
+  };
+
+  pageDisplayConfig: {
+    showBreadcrumbs?: boolean;
+    showToc?: boolean;
+    showLastUpdated?: boolean;
+    defaultViewMode?: 'document' | 'code';
+  };
+
+  syncConfig: {
+    autoSync?: boolean;
+    syncIntervalMinutes?: number;
+    syncOnWebhook?: boolean;
+    conflictResolution?: 'git_wins' | 'wiki_wins' | 'manual';
+  };
+
+  customSettings: Record<string, any>;
+  updatedAt: string;
+}
+
+export interface SpaceShortcut {
+  id: number;
+  space: number;
+  spaceSlug: string;
+  pageId: number;
+  label: string;
+  order: number;
+  createdBy: number;
+  createdByUsername: string;
+  createdAt: string;
+}
+
+export interface UserSpacePreference {
+  id: number;
+  user: number;
+  userUsername: string;
+  space: number;
+  spaceSlug: string;
+  spaceName: string;
+  isFavorite: boolean;
+  lastVisitedAt: string;
+  visitCount: number;
+  lastViewedPageId: number | null;
+}
+
+export interface SpaceAttribute {
+  id: number;
+  space: number;
+  spaceSlug: string;
+  fieldId: string;
+  fieldName: string;
+  fieldValueStr: string | null;
+  fieldValueInt: number | null;
+  fieldValueFloat: number | null;
+  value: string | number | null; // Computed field
+  collectedAt: string;
+  dataSource: string;
+  version: number;
+}
+
+// Legacy Space interface (for backward compatibility)
+export interface SpaceLegacy {
   id: number;
   slug: string;
   name: string;

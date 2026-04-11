@@ -1,23 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Urls } from '../types';
-import { repositoryApi } from '../services/repositoryApi';
-import {
-  FolderGit2,
-  User,
-  LogOut,
-  X,
-  ChevronDown,
-  Menu,
-  Star,
-  Clock,
-  LayoutDashboard,
-  ChevronRight,
-  Code2,
-  FileText,
-} from 'lucide-react';
-import FileTree from './Sidebar/FileTree';
-import DocumentTree from './Sidebar/DocumentTree';
+import type { Space, UserSpacePreference } from '../types';
+import spaceApi from '../services/spaceApi';
+import { User, LogOut, X, ChevronDown, Menu, Home, Settings, Star, Clock } from 'lucide-react';
+import SpaceTree from './SpaceTree';
 
 interface LayoutProps {
   navigate: (view: string) => void;
@@ -29,96 +16,89 @@ export default function Layout({ navigate, children }: LayoutProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [favorites, setFavorites] = useState<Array<{ id: number; repository_id: string }>>([]);
-  const [recentRepos, setRecentRepos] = useState<Array<{ id: number; repository_id: string }>>([]);
-  const [currentRepoId, setCurrentRepoId] = useState<string | null>(null);
-  const [currentPath, setCurrentPath] = useState<string>('');
-  const [viewMode, setViewMode] = useState<'developer' | 'document'>('developer');
-  const [showViewModeDropdown, setShowViewModeDropdown] = useState(false);
-  const [repoFilter, setRepoFilter] = useState<'favorites' | 'recent'>('favorites');
-  const [repoListExpanded, setRepoListExpanded] = useState(true);
+  const [favorites, setFavorites] = useState<UserSpacePreference[]>([]);
+  const [recent, setRecent] = useState<UserSpacePreference[]>([]);
+  const [allSpaces, setAllSpaces] = useState<Space[]>([]);
+  const [selectedSpace, setSelectedSpace] = useState<Space | null>(null);
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Auto-collapse repo list when a repo is selected
-  useEffect(() => {
-    if (currentRepoId) {
-      setRepoListExpanded(false);
-    }
-  }, [currentRepoId]);
   const currentView = window.location.hash.slice(1).split('?')[0] || Urls.Dashboard;
-  const currentFilter = new URLSearchParams(window.location.hash.split('?')[1] || '').get('filter');
 
-  // Track current repo and path from URL and load view mode preference
+  // Load spaces and track current space from URL
   useEffect(() => {
-    const updateCurrentRepo = async () => {
-      const urlParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
-      const repoId = urlParams.get('repo');
-      const path = urlParams.get('path') || '';
-      setCurrentRepoId(repoId);
-      setCurrentPath(path);
-
-      if (repoId) {
-        try {
-          const mode = await repositoryApi.getViewMode(repoId);
-          setViewMode(mode);
-        } catch (e) {
-          console.error('Failed to load view mode', e);
-          setViewMode('developer');
-        }
-      }
-    };
-
-    updateCurrentRepo();
-    window.addEventListener('hashchange', updateCurrentRepo);
-    return () => window.removeEventListener('hashchange', updateCurrentRepo);
-  }, []);
-
-  useEffect(() => {
-    // Load favorites and recent repos from database
-    const loadFavorites = async () => {
+    const loadSpaces = async () => {
       try {
-        const favs = await repositoryApi.getFavorites();
+        const { favorites: favs, recent: rec, all } = await spaceApi.getMySpaces();
         setFavorites(favs);
-      } catch (e) {
-        console.error('Failed to load favorites', e);
+        setRecent(rec);
+        setAllSpaces(all);
+
+        // Get current space from URL
+        const urlParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+        const spaceSlug = urlParams.get('space');
+        if (spaceSlug) {
+          const space = all.find(s => s.slug === spaceSlug);
+          setSelectedSpace(space || null);
+        }
+      } catch (error) {
+        console.error('Failed to load spaces:', error);
+      } finally {
+        setLoading(false);
       }
     };
 
-    const loadRecentRepos = async () => {
-      try {
-        const recent = await repositoryApi.getRecent();
-        setRecentRepos(recent);
-      } catch (e) {
-        console.error('Failed to load recent repos', e);
-      }
-    };
-
-    loadFavorites();
-    loadRecentRepos();
-
-    // Listen for custom event when favorites/recent are updated
-    const handleRepositoriesUpdated = () => {
-      loadFavorites();
-      loadRecentRepos();
-    };
-
-    window.addEventListener('repositoriesUpdated', handleRepositoriesUpdated);
-
-    return () => {
-      window.removeEventListener('repositoriesUpdated', handleRepositoriesUpdated);
-    };
+    loadSpaces();
   }, []);
 
-  const mainMenuItems = [{ id: Urls.Dashboard, label: 'Dashboard', icon: LayoutDashboard }];
-
-  const handleViewModeChange = async (mode: 'developer' | 'document') => {
-    setViewMode(mode);
-    setShowViewModeDropdown(false);
-    if (currentRepoId) {
-      try {
-        await repositoryApi.setViewMode(currentRepoId, mode);
-      } catch (e) {
-        console.error('Failed to save view mode', e);
+  // Handle hash changes separately
+  useEffect(() => {
+    const handleHashChange = () => {
+      const urlParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+      const spaceSlug = urlParams.get('space');
+      if (spaceSlug && allSpaces.length > 0) {
+        const space = allSpaces.find(s => s.slug === spaceSlug);
+        setSelectedSpace(space || null);
+      } else {
+        setSelectedSpace(null);
       }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [allSpaces]);
+
+  const handleSelectSpace = async (space: Space) => {
+    // Fetch fresh space data to ensure we have latest git_default_branch
+    try {
+      const freshSpace = await spaceApi.getSpace(space.slug);
+      setSelectedSpace(freshSpace);
+      // Mark as visited for recent tracking
+      await spaceApi.markVisited(space.slug);
+      // Reload recent to show the newly visited space
+      const recentSpaces = await spaceApi.listRecent(10);
+      setRecent(recentSpaces);
+    } catch (error) {
+      console.error('Failed to fetch space details:', error);
+      setSelectedSpace(space); // Fallback to cached data
+    }
+    navigate(`${Urls.Spaces}?space=${space.slug}`);
+    setSidebarOpen(false);
+  };
+
+  // Will be used when we add favorite toggle buttons to space items
+  const _handleToggleFavorite = async (spaceSlug: string) => {
+    const pref = favorites.find(f => f.spaceSlug === spaceSlug);
+    try {
+      if (pref) {
+        await spaceApi.removeFromFavorites(spaceSlug);
+        setFavorites(favorites.filter(f => f.spaceSlug !== spaceSlug));
+      } else {
+        const newPref = await spaceApi.addToFavorites(spaceSlug);
+        setFavorites([...favorites, newPref]);
+      }
+    } catch (error) {
+      console.error('Failed to toggle favorite:', error);
     }
   };
 
@@ -148,6 +128,7 @@ export default function Layout({ navigate, children }: LayoutProps) {
           borderColor: 'var(--sidebar-border)',
         }}
       >
+        {/* Header */}
         <div style={{ backgroundColor: 'var(--sidebar-header-bg)' }}>
           <div
             className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} px-3 py-3`}
@@ -183,370 +164,206 @@ export default function Layout({ navigate, children }: LayoutProps) {
             </button>
           </div>
         </div>
+
+        {/* Navigation */}
         <nav className="py-2 flex-1">
-          {/* Main menu items */}
-          {mainMenuItems.map(item => {
-            const Icon = item.icon;
-            const isActive = currentView === item.id && !currentFilter;
-
-            return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  navigate(item.id);
-                  setSidebarOpen(false);
-                }}
-                className={`w-full flex items-center py-2 mx-2 text-sm font-medium transition-all rounded-md ${
-                  sidebarCollapsed ? 'justify-center px-0' : 'px-3'
-                }`}
-                style={{
-                  backgroundColor: isActive ? 'var(--sidebar-active)' : undefined,
-                  color: isActive ? 'var(--sidebar-text-active)' : 'var(--sidebar-text)',
-                }}
-                title={sidebarCollapsed ? item.label : undefined}
-                onMouseEnter={e => {
-                  if (!isActive) {
-                    e.currentTarget.style.backgroundColor = 'var(--sidebar-hover)';
-                    e.currentTarget.style.color = 'var(--sidebar-text-hover)';
-                  }
-                }}
-                onMouseLeave={e => {
-                  if (!isActive) {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                    e.currentTarget.style.color = 'var(--sidebar-text)';
-                  }
-                }}
-              >
-                <Icon className={`w-5 h-5 ${sidebarCollapsed ? '' : 'mr-2'}`} />
-                {!sidebarCollapsed && item.label}
-              </button>
-            );
-          })}
-
-          {/* Repository Selection Section */}
+          {/* Dashboard Link */}
           {!sidebarCollapsed && (
+            <button
+              onClick={() => {
+                navigate(Urls.Dashboard);
+                setSidebarOpen(false);
+              }}
+              className="w-full flex items-center py-2 mx-2 px-3 text-sm font-medium transition-all rounded-md"
+              style={{
+                backgroundColor:
+                  currentView === Urls.Dashboard ? 'var(--sidebar-active)' : undefined,
+                color:
+                  currentView === Urls.Dashboard
+                    ? 'var(--sidebar-text-active)'
+                    : 'var(--sidebar-text)',
+              }}
+              onMouseEnter={e => {
+                if (currentView !== Urls.Dashboard) {
+                  e.currentTarget.style.backgroundColor = 'var(--sidebar-hover)';
+                  e.currentTarget.style.color = 'var(--sidebar-text-hover)';
+                }
+              }}
+              onMouseLeave={e => {
+                if (currentView !== Urls.Dashboard) {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = 'var(--sidebar-text)';
+                }
+              }}
+            >
+              <Home className="w-5 h-5 mr-2" />
+              Dashboard
+            </button>
+          )}
+
+          {/* My Spaces Section */}
+          {!sidebarCollapsed && !loading && (
             <div className="mt-4">
               <div
-                className="flex items-center px-4 py-1.5 text-xs font-semibold uppercase"
+                className="px-4 py-1.5 text-xs font-semibold uppercase"
                 style={{ color: 'var(--text-muted)' }}
               >
-                Repository Selection
+                My Spaces
               </div>
 
-              {/* Repositories menu item */}
+              {/* Browse All Spaces */}
               <button
                 onClick={() => {
-                  navigate(Urls.Repositories);
+                  navigate(Urls.Spaces);
                   setSidebarOpen(false);
                 }}
-                className="w-full flex items-center py-2 mx-2 px-3 text-sm font-medium transition-all rounded-md"
+                className="w-full flex items-center py-2 px-4 mx-2 text-sm transition-all rounded-md"
                 style={{
                   backgroundColor:
-                    currentView === Urls.Repositories && !currentRepoId
+                    currentView === Urls.Spaces && !selectedSpace
                       ? 'var(--sidebar-active)'
                       : undefined,
                   color:
-                    currentView === Urls.Repositories && !currentRepoId
+                    currentView === Urls.Spaces && !selectedSpace
                       ? 'var(--sidebar-text-active)'
                       : 'var(--sidebar-text)',
                 }}
                 onMouseEnter={e => {
-                  if (!(currentView === Urls.Repositories && !currentRepoId)) {
+                  if (!(currentView === Urls.Spaces && !selectedSpace)) {
                     e.currentTarget.style.backgroundColor = 'var(--sidebar-hover)';
-                    e.currentTarget.style.color = 'var(--sidebar-text-hover)';
                   }
                 }}
                 onMouseLeave={e => {
-                  if (!(currentView === Urls.Repositories && !currentRepoId)) {
+                  if (!(currentView === Urls.Spaces && !selectedSpace)) {
                     e.currentTarget.style.backgroundColor = 'transparent';
-                    e.currentTarget.style.color = 'var(--sidebar-text)';
                   }
                 }}
               >
-                <FolderGit2 className="w-5 h-5 mr-2" />
-                Repositories
+                Browse
               </button>
 
-              {/* Combined Favorites/Recent Section with Filter Toggle */}
-              {(favorites.length > 0 || recentRepos.length > 0) && (
-                <div className="mt-2">
-                  <button
-                    onClick={() => setRepoListExpanded(!repoListExpanded)}
-                    className="w-full flex items-center justify-between px-4 py-1.5 text-xs font-semibold hover:bg-opacity-10 hover:bg-gray-500 transition-all rounded-md"
-                    style={{ color: 'var(--text-secondary)' }}
-                  >
-                    <div className="flex items-center gap-2">
-                      {repoFilter === 'favorites' ? (
-                        <Star className="w-3 h-3" />
-                      ) : (
-                        <Clock className="w-3 h-3" />
-                      )}
-                      <span>{repoFilter === 'favorites' ? 'Favorites' : 'Recent'}</span>
-                    </div>
-                    <ChevronRight
-                      className={`w-3 h-3 transition-transform ${
-                        repoListExpanded ? 'rotate-90' : ''
-                      }`}
-                    />
-                  </button>
-
-                  {repoListExpanded && (
-                    <>
-                      {/* Filter Toggle */}
-                      <div className="flex gap-1 px-2 py-1.5">
-                        <button
-                          onClick={() => setRepoFilter('favorites')}
-                          className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1 text-xs rounded transition-all"
-                          style={{
-                            backgroundColor:
-                              repoFilter === 'favorites' ? 'var(--sidebar-active)' : 'transparent',
-                            color:
-                              repoFilter === 'favorites'
-                                ? 'var(--sidebar-text-active)'
-                                : 'var(--sidebar-text)',
-                            fontWeight: repoFilter === 'favorites' ? '600' : 'normal',
-                          }}
-                        >
-                          <Star className="w-3 h-3" />
-                          Favorites
-                        </button>
-                        <button
-                          onClick={() => setRepoFilter('recent')}
-                          className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1 text-xs rounded transition-all"
-                          style={{
-                            backgroundColor:
-                              repoFilter === 'recent' ? 'var(--sidebar-active)' : 'transparent',
-                            color:
-                              repoFilter === 'recent'
-                                ? 'var(--sidebar-text-active)'
-                                : 'var(--sidebar-text)',
-                            fontWeight: repoFilter === 'recent' ? '600' : 'normal',
-                          }}
-                        >
-                          <Clock className="w-3 h-3" />
-                          Recent
-                        </button>
-                      </div>
-
-                      {/* Repository List */}
-                      <div className="mt-1">
-                        {repoFilter === 'favorites' &&
-                          favorites.map(fav => {
-                            const repoId = fav.repository_id;
-                            const displayName = repoId.replace('_', '/');
-                            const isActive = currentRepoId === repoId;
-                            return (
-                              <button
-                                key={fav.id}
-                                onClick={() => {
-                                  navigate(`${Urls.Repositories}?repo=${repoId}`);
-                                  setSidebarOpen(false);
-                                }}
-                                className="w-full flex items-center px-4 py-2 mx-2 text-sm transition-all truncate rounded-md"
-                                style={{
-                                  backgroundColor: isActive
-                                    ? 'var(--sidebar-hover)'
-                                    : 'transparent',
-                                  color: isActive
-                                    ? 'var(--sidebar-text-hover)'
-                                    : 'var(--sidebar-text)',
-                                  fontWeight: isActive ? '600' : 'normal',
-                                }}
-                                onMouseEnter={e => {
-                                  if (!isActive) {
-                                    e.currentTarget.style.backgroundColor = 'var(--sidebar-hover)';
-                                    e.currentTarget.style.color = 'var(--sidebar-text-hover)';
-                                  }
-                                }}
-                                onMouseLeave={e => {
-                                  if (!isActive) {
-                                    e.currentTarget.style.backgroundColor = 'transparent';
-                                    e.currentTarget.style.color = 'var(--sidebar-text)';
-                                  }
-                                }}
-                                title={displayName}
-                              >
-                                {displayName}
-                              </button>
-                            );
-                          })}
-                        {repoFilter === 'recent' &&
-                          recentRepos.map(recent => {
-                            const repoId = recent.repository_id;
-                            const displayName = repoId.replace('_', '/');
-                            const isActive = currentRepoId === repoId;
-                            return (
-                              <button
-                                key={recent.id}
-                                onClick={() => {
-                                  navigate(`${Urls.Repositories}?repo=${repoId}`);
-                                  setSidebarOpen(false);
-                                }}
-                                className="w-full flex items-center px-4 py-2 mx-2 text-sm transition-all truncate rounded-md"
-                                style={{
-                                  backgroundColor: isActive
-                                    ? 'var(--sidebar-hover)'
-                                    : 'transparent',
-                                  color: isActive
-                                    ? 'var(--sidebar-text-hover)'
-                                    : 'var(--sidebar-text)',
-                                  fontWeight: isActive ? '600' : 'normal',
-                                }}
-                                onMouseEnter={e => {
-                                  if (!isActive) {
-                                    e.currentTarget.style.backgroundColor = 'var(--sidebar-hover)';
-                                    e.currentTarget.style.color = 'var(--sidebar-text-hover)';
-                                  }
-                                }}
-                                onMouseLeave={e => {
-                                  if (!isActive) {
-                                    e.currentTarget.style.backgroundColor = 'transparent';
-                                    e.currentTarget.style.color = 'var(--sidebar-text)';
-                                  }
-                                }}
-                                title={displayName}
-                              >
-                                {displayName}
-                              </button>
-                            );
-                          })}
-                        {repoFilter === 'favorites' && favorites.length === 0 && (
-                          <div
-                            className="px-4 py-2 text-xs text-center"
-                            style={{ color: 'var(--text-muted)' }}
-                          >
-                            No favorites yet
-                          </div>
-                        )}
-                        {repoFilter === 'recent' && recentRepos.length === 0 && (
-                          <div
-                            className="px-4 py-2 text-xs text-center"
-                            style={{ color: 'var(--text-muted)' }}
-                          >
-                            No recent repositories
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  )}
+              {/* Favorites */}
+              <div className="mt-2">
+                <div
+                  className="px-4 py-1 text-xs font-medium flex items-center gap-1"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  <Star className="w-3 h-3" />
+                  Starred
                 </div>
-              )}
+                {favorites.length > 0 ? (
+                  favorites.map(pref => {
+                    const space = allSpaces.find(s => s.slug === pref.spaceSlug);
+                    if (!space) {
+                      return null;
+                    }
+                    const isSelected = selectedSpace?.slug === space.slug;
 
-              {/* Selected Repository Display with View Mode Switcher */}
-              {currentRepoId && (
-                <div className="mt-2 mb-2">
-                  <div
-                    className="flex items-center px-4 py-1.5 text-xs font-semibold uppercase"
-                    style={{ color: 'var(--text-muted)' }}
-                  >
-                    Selected Repository
+                    return (
+                      <button
+                        key={space.id}
+                        onClick={() => handleSelectSpace(space)}
+                        className={`w-full flex items-center py-2 px-4 mx-2 text-sm transition-all rounded-md ${
+                          isSelected
+                            ? 'bg-sidebar-active text-sidebar-text-active'
+                            : 'hover:bg-sidebar-hover'
+                        }`}
+                        style={{
+                          backgroundColor: isSelected ? 'var(--sidebar-active)' : undefined,
+                          color: isSelected ? 'var(--sidebar-text-active)' : 'var(--sidebar-text)',
+                        }}
+                      >
+                        <div className="w-8 h-8 rounded bg-primary text-white flex items-center justify-center mr-2 text-xs font-bold">
+                          {space.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex-1 text-left truncate">
+                          <div className="font-medium truncate">{space.name}</div>
+                          <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                            {space.page_count} pages
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="px-4 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+                    No starred spaces
                   </div>
-                  <div className="mx-2">
-                    <div
-                      className="w-full flex items-center justify-between py-2 px-3 text-sm font-semibold transition-all rounded-md"
-                      style={{
-                        backgroundColor: 'var(--sidebar-active)',
-                        color: 'var(--sidebar-text-active)',
-                      }}
-                    >
-                      <div className="flex items-center min-w-0 flex-1">
-                        <FolderGit2 className="w-4 h-4 mr-2 flex-shrink-0" />
-                        <span className="truncate">{currentRepoId.replace('_', '/')}</span>
-                      </div>
-                      <div className="relative ml-2">
+                )}
+              </div>
+
+              {/* Recent (non-favorites) */}
+              <div className="mt-2">
+                <div
+                  className="px-4 py-1 text-xs font-medium flex items-center gap-1"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  <Clock className="w-3 h-3" />
+                  Recent
+                </div>
+                {recent.filter(r => !favorites.some(f => f.spaceSlug === r.spaceSlug)).length >
+                0 ? (
+                  recent
+                    .filter(r => !favorites.some(f => f.spaceSlug === r.spaceSlug))
+                    .slice(0, 5)
+                    .map(pref => {
+                      const space = allSpaces.find(s => s.slug === pref.spaceSlug);
+                      if (!space) {
+                        return null;
+                      }
+                      const isSelected = selectedSpace?.slug === space.slug;
+
+                      return (
                         <button
-                          onClick={() => setShowViewModeDropdown(!showViewModeDropdown)}
-                          className="flex items-center gap-1 px-2 py-1 rounded text-xs hover:bg-opacity-20 hover:bg-white transition-all"
-                          title="Switch view mode"
+                          key={space.id}
+                          onClick={() => handleSelectSpace(space)}
+                          className="w-full flex items-center py-2 px-4 mx-2 text-sm transition-all rounded-md"
+                          style={{
+                            backgroundColor: isSelected ? 'var(--sidebar-active)' : undefined,
+                            color: isSelected
+                              ? 'var(--sidebar-text-active)'
+                              : 'var(--sidebar-text)',
+                          }}
+                          onMouseEnter={e => {
+                            if (!isSelected) {
+                              e.currentTarget.style.backgroundColor = 'var(--sidebar-hover)';
+                            }
+                          }}
+                          onMouseLeave={e => {
+                            if (!isSelected) {
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                            }
+                          }}
                         >
-                          {viewMode === 'developer' ? (
-                            <Code2 className="w-3.5 h-3.5" />
-                          ) : (
-                            <FileText className="w-3.5 h-3.5" />
-                          )}
-                          <ChevronDown className="w-3 h-3" />
-                        </button>
-                        {showViewModeDropdown && (
-                          <>
-                            <div
-                              className="fixed inset-0 z-10"
-                              onClick={() => setShowViewModeDropdown(false)}
-                            />
-                            <div
-                              className="absolute right-0 top-full mt-1 rounded-lg shadow-lg z-20 min-w-[160px]"
-                              style={{
-                                backgroundColor: 'var(--card-bg)',
-                                borderColor: 'var(--card-border)',
-                                border: '1px solid',
-                              }}
-                            >
-                              <button
-                                onClick={() => handleViewModeChange('developer')}
-                                className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-all rounded-t-lg"
-                                style={{
-                                  color: 'var(--text-primary)',
-                                  backgroundColor:
-                                    viewMode === 'developer'
-                                      ? 'var(--bg-secondary)'
-                                      : 'transparent',
-                                  fontWeight: viewMode === 'developer' ? '600' : 'normal',
-                                }}
-                                onMouseEnter={e => {
-                                  if (viewMode !== 'developer') {
-                                    e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
-                                  }
-                                }}
-                                onMouseLeave={e => {
-                                  if (viewMode !== 'developer') {
-                                    e.currentTarget.style.backgroundColor = 'transparent';
-                                  }
-                                }}
-                              >
-                                <Code2 className="w-4 h-4" />
-                                Developer
-                              </button>
-                              <button
-                                onClick={() => handleViewModeChange('document')}
-                                className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-all rounded-b-lg"
-                                style={{
-                                  color: 'var(--text-primary)',
-                                  backgroundColor:
-                                    viewMode === 'document' ? 'var(--bg-secondary)' : 'transparent',
-                                  fontWeight: viewMode === 'document' ? '600' : 'normal',
-                                }}
-                                onMouseEnter={e => {
-                                  if (viewMode !== 'document') {
-                                    e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
-                                  }
-                                }}
-                                onMouseLeave={e => {
-                                  if (viewMode !== 'document') {
-                                    e.currentTarget.style.backgroundColor = 'transparent';
-                                  }
-                                }}
-                              >
-                                <FileText className="w-4 h-4" />
-                                Document
-                              </button>
+                          <div className="w-8 h-8 rounded bg-primary text-white flex items-center justify-center mr-2 text-xs font-bold">
+                            {space.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="flex-1 text-left truncate">
+                            <div className="font-medium truncate">{space.name}</div>
+                            <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                              {space.page_count} pages
                             </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
+                          </div>
+                        </button>
+                      );
+                    })
+                ) : (
+                  <div className="px-4 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+                    No recent spaces
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )}
 
-          {/* File/Document Tree Section */}
-          {!sidebarCollapsed && currentRepoId && (
-            <div className="mt-4">
-              {viewMode === 'developer' ? (
-                <FileTree repositoryId={currentRepoId} currentPath={currentPath} />
-              ) : (
-                <DocumentTree repositoryId={currentRepoId} currentPath={currentPath} />
-              )}
+          {/* Selected Space Tree */}
+          {!sidebarCollapsed && selectedSpace && (
+            <div className="mt-4 border-t pt-4" style={{ borderColor: 'var(--sidebar-divider)' }}>
+              <SpaceTree
+                space={selectedSpace}
+                onSelectFile={setSelectedPath}
+                spaceName={selectedSpace.name}
+              />
             </div>
           )}
         </nav>
@@ -618,8 +435,25 @@ export default function Layout({ navigate, children }: LayoutProps) {
                       e.currentTarget.style.backgroundColor = 'transparent';
                     }}
                   >
-                    <LayoutDashboard size={14} />
+                    <Settings size={14} />
                     Configuration
+                  </button>
+                  <button
+                    onClick={() => {
+                      navigate(Urls.SpaceConfiguration);
+                      setShowUserMenu(false);
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-all"
+                    style={{ color: 'var(--text-primary)' }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                  >
+                    <Settings size={14} />
+                    Space Configuration
                   </button>
                   <div style={{ borderTop: '1px solid var(--border-color)' }} />
                   <button
@@ -644,7 +478,44 @@ export default function Layout({ navigate, children }: LayoutProps) {
 
       {/* Main content */}
       <div className={sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-64'}>
-        <main>{children}</main>
+        {/* Mobile menu button */}
+        <div className="lg:hidden p-4">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-2 rounded-md"
+            style={{ backgroundColor: 'var(--card-bg)' }}
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+        </div>
+
+        <main>
+          {selectedSpace && selectedPath ? (
+            <div className="p-8">
+              <div className="max-w-4xl mx-auto">
+                <div className="mb-4 text-sm" style={{ color: 'var(--text-muted)' }}>
+                  {selectedSpace.name} / {selectedPath}
+                </div>
+                <div
+                  className="p-8 rounded-lg text-center"
+                  style={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border)' }}
+                >
+                  <div
+                    className="text-lg font-semibold mb-2"
+                    style={{ color: 'var(--text-primary)' }}
+                  >
+                    Page View Coming Soon
+                  </div>
+                  <div className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                    This will display the rendered markdown content for: <code>{selectedPath}</code>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            children
+          )}
+        </main>
       </div>
     </div>
   );

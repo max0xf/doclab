@@ -11,6 +11,7 @@ import { Urls } from './types';
 const Dashboard = React.lazy(() => import('./views/Dashboard'));
 const Repositories = React.lazy(() => import('./views/Repositories'));
 const Spaces = React.lazy(() => import('./views/Spaces'));
+const SpaceConfiguration = React.lazy(() => import('./views/SpaceConfiguration'));
 const DocumentEditor = React.lazy(() => import('./views/DocumentEditor'));
 const Search = React.lazy(() => import('./views/Search'));
 const UserManagement = React.lazy(() => import('./views/UserManagement'));
@@ -56,9 +57,10 @@ function AppContent() {
   const renderView = () => {
     return (
       <React.Suspense fallback={<ViewLoadingFallback />}>
-        {activeView === Urls.Dashboard && <Dashboard />}
+        {activeView === Urls.Dashboard && <Dashboard navigate={navigate} />}
         {activeView === Urls.Repositories && <Repositories />}
-        {activeView === Urls.Spaces && <Spaces />}
+        {activeView === Urls.Spaces && <Spaces navigate={navigate} />}
+        {activeView === Urls.SpaceConfiguration && <SpaceConfiguration />}
         {activeView.startsWith(Urls.DocumentEditor) && <DocumentEditor />}
         {activeView === Urls.Search && <Search />}
         {activeView === Urls.UserManagement && <UserManagement />}
