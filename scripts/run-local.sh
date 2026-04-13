@@ -38,6 +38,15 @@ if [ ! -d "$BACKEND_DIR" ]; then
   exit 1
 fi
 
+# Kill any existing backend processes
+echo "Checking for existing backend processes..."
+EXISTING_PIDS=$(pgrep -f "manage.py runserver" || true)
+if [ -n "$EXISTING_PIDS" ]; then
+  echo "Stopping existing backend processes: $EXISTING_PIDS"
+  pkill -f "manage.py runserver" || true
+  sleep 1
+fi
+
 # Start backend in background
 echo "Starting backend on :8000..."
 (
