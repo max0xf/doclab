@@ -9,7 +9,7 @@ interface ViewModeSwitcherProps {
 export function ViewModeSwitcher({ currentMode, onModeChange }: ViewModeSwitcherProps) {
   return (
     <div
-      className="flex items-center gap-1 px-2 py-1 rounded-md"
+      className="flex items-center gap-0.5 px-1 py-0.5 rounded"
       style={{
         backgroundColor: 'var(--bg-secondary)',
         border: '1px solid var(--border-color)',
@@ -19,7 +19,7 @@ export function ViewModeSwitcher({ currentMode, onModeChange }: ViewModeSwitcher
         <button
           key={option.id}
           onClick={() => onModeChange(option.id)}
-          className="px-3 py-1.5 text-xs font-medium rounded transition-all hover:opacity-80"
+          className="px-2 py-0.5 text-xs font-medium rounded transition-all hover:opacity-80"
           style={{
             backgroundColor: currentMode === option.id ? '#0066cc' : 'transparent',
             color: currentMode === option.id ? 'white' : 'var(--text-primary)',

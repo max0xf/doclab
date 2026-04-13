@@ -38,50 +38,48 @@ export function FileViewerHeader({
 }: FileViewerHeaderProps) {
   return (
     <div
-      className="flex items-center justify-between px-6 py-4 border-b"
+      className="flex items-center justify-between px-4 py-2 border-b"
       style={{
         backgroundColor: 'var(--bg-secondary)',
         borderColor: 'var(--border-color)',
       }}
     >
       {/* Left: Back button and file info */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <button
           onClick={onBack}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm rounded hover:opacity-80 transition-opacity"
+          className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:opacity-80 transition-opacity"
           style={{
             backgroundColor: 'var(--bg-primary)',
             color: 'var(--primary)',
           }}
         >
-          <ArrowLeft size={16} />
+          <ArrowLeft size={14} />
           Back
         </button>
-        <div>
-          <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-            {fileName}
-          </div>
-          <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-            {spaceName} / {filePath}
-          </div>
+        <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+          {spaceName} / {filePath}
+        </div>
+        <div className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+          {fileName}
         </div>
       </div>
 
       {/* Right: Controls */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         {/* View Mode Switcher */}
         {!isEditMode && <ViewModeSwitcher currentMode={viewMode} onModeChange={onViewModeChange} />}
 
         {/* Comments Button */}
         <button
           onClick={onToggleComments}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm rounded hover:opacity-80 transition-opacity"
+          className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:opacity-80 transition-opacity"
           style={{
             backgroundColor: showCommentsPanel ? '#0066cc' : 'var(--bg-tertiary)',
             color: showCommentsPanel ? 'white' : 'var(--text-secondary)',
           }}
         >
-          <MessageSquare size={16} />
+          <MessageSquare size={14} />
           Comments {commentsCount ? `(${commentsCount})` : ''}
         </button>
 
@@ -90,38 +88,38 @@ export function FileViewerHeader({
           <>
             <button
               onClick={onCancel}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm rounded hover:opacity-80 transition-opacity"
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:opacity-80 transition-opacity"
               style={{
                 backgroundColor: 'var(--bg-tertiary)',
                 color: 'var(--text-secondary)',
               }}
             >
-              <X size={16} />
+              <X size={14} />
               Cancel
             </button>
             <button
               onClick={onSave}
               disabled={!isDirty}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm rounded hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
               style={{
                 backgroundColor: '#0066cc',
                 color: 'white',
               }}
             >
-              <Save size={16} />
-              Save Changes
+              <Save size={14} />
+              Save
             </button>
           </>
         ) : (
           <button
             onClick={onToggleEdit}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm rounded hover:opacity-80 transition-opacity"
+            className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:opacity-80 transition-opacity"
             style={{
               backgroundColor: 'var(--bg-tertiary)',
               color: 'var(--text-secondary)',
             }}
           >
-            <Edit size={16} />
+            <Edit size={14} />
             Edit
           </button>
         )}

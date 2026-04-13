@@ -48,7 +48,15 @@ export default function FileContentRenderer({
 
   switch (fileType) {
     case 'markdown':
-      return <MarkdownRenderer content={content} />;
+      return (
+        <MarkdownRenderer
+          content={content}
+          onLineSelect={onLineSelect}
+          selectedLines={selectedLines}
+          enrichments={enrichments}
+          onEnrichmentClick={onEnrichmentClick}
+        />
+      );
     case 'code':
       return (
         <CodeRenderer

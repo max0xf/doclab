@@ -118,7 +118,7 @@ export function PlainTextContentWidget({
               <div className="flex-shrink-0 w-8 px-1 py-1 flex items-center justify-center">
                 {hasEnrichments && (
                   <div
-                    className="w-2 h-2 rounded-full cursor-pointer"
+                    className="w-3 h-3 rounded-full cursor-pointer flex items-center justify-center"
                     style={{
                       backgroundColor: hasComments ? '#0066cc' : hasDiff ? '#ff9800' : '#4caf50',
                     }}
@@ -129,13 +129,32 @@ export function PlainTextContentWidget({
                       }
                     }}
                     title={`${vLine.enrichments.length} enrichment(s)`}
-                  />
+                  >
+                    {hasComments &&
+                      vLine.enrichments.filter(e => e.type === 'comment').length > 1 && (
+                        <span className="text-white text-xs font-bold">
+                          {vLine.enrichments.filter(e => e.type === 'comment').length}
+                        </span>
+                      )}
+                  </div>
                 )}
               </div>
 
               {/* Line Content */}
-              <div className="flex-1 px-3 py-1 whitespace-pre-wrap break-all">
+              <div className="flex-1 px-3 py-1 whitespace-pre-wrap break-all relative">
                 {vLine.content || ' '}
+                {/* Comment indicator on the right */}
+                {hasComments && (
+                  <div
+                    className="absolute right-2 top-1 flex items-center gap-1 px-2 py-0.5 rounded text-xs"
+                    style={{
+                      backgroundColor: '#e3f2fd',
+                      color: '#0066cc',
+                    }}
+                  >
+                    💬 {vLine.enrichments.filter(e => e.type === 'comment').length}
+                  </div>
+                )}
               </div>
             </div>
           );

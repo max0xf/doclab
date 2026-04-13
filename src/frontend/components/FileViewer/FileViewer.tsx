@@ -25,14 +25,21 @@ export function FileViewer({
   onBack,
   onSave,
 }: FileViewerProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>('visual');
+  const [viewMode, setViewMode] = useState<ViewMode>('plain');
   const [isEditMode, setIsEditMode] = useState(false);
   const [showCommentsPanel, setShowCommentsPanel] = useState(false);
+  const [selectedLines, setSelectedLines] = useState<{ start: number; end: number } | null>(null);
+  const [activeEnrichmentTab, setActiveEnrichmentTab] = useState<
+    'all' | 'comments' | 'diffs' | 'prs' | 'local'
+  >('all');
   const [editedContent, setEditedContent] = useState(content);
   const [isDirty, setIsDirty] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveDescription, setSaveDescription] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+
+  // Build source URI for enrichments
+  const sourceUri = `file://${spaceName}/${filePath}`;
 
   // Convert EnrichmentsResponse to Enrichment[]
   const enrichments: Enrichment[] = [
@@ -129,7 +136,14 @@ export function FileViewer({
 
   const handleLineClick = (lineNumber: number) => {
     console.log('[FileViewer] Line clicked:', lineNumber);
+    setSelectedLines({ start: lineNumber, end: lineNumber });
+    setActiveEnrichmentTab('comments');
     setShowCommentsPanel(true);
+  };
+
+  const handleCommentsChange = () => {
+    // Reload enrichments after comment changes
+    window.location.reload(); // TODO: Implement proper enrichment reload
   };
 
   const handleEnrichmentClick = (enrichment: Enrichment) => {
@@ -177,7 +191,12 @@ export function FileViewer({
         onBack={onBack}
         onViewModeChange={setViewMode}
         onToggleEdit={() => setIsEditMode(!isEditMode)}
-        onToggleComments={() => setShowCommentsPanel(!showCommentsPanel)}
+        onToggleComments={() => {
+          if (!showCommentsPanel) {
+            setActiveEnrichmentTab('comments');
+          }
+          setShowCommentsPanel(!showCommentsPanel);
+        }}
         onSave={handleSaveClick}
         onCancel={handleCancel}
         isDirty={isDirty}
@@ -201,13 +220,20 @@ export function FileViewer({
             <EnrichmentPanel
               enrichments={enrichmentsResponse}
               fileName={fileName}
-              onClose={() => setShowCommentsPanel(false)}
+              sourceUri={sourceUri}
+              selectedLines={selectedLines}
+              activeTab={activeEnrichmentTab}
+              onClose={() => {
+                setShowCommentsPanel(false);
+                setSelectedLines(null);
+              }}
               onAcceptDiff={async diffId => {
                 console.log('[FileViewer] Accepting diff:', diffId);
               }}
               onRejectDiff={async diffId => {
                 console.log('[FileViewer] Rejecting diff:', diffId);
               }}
+              onCommentsChange={handleCommentsChange}
             />
           </div>
         )}

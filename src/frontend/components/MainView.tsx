@@ -53,11 +53,40 @@ interface SpaceContentViewProps {
 }
 
 function SpaceContentView({ space, initialPath }: SpaceContentViewProps) {
-  const [currentPath, setCurrentPath] = useState<string>(initialPath || '');
+  // Read path from URL on mount (handle hash routing)
+  const hash = window.location.hash;
+  const hashParts = hash.split('?');
+  const urlParams = new URLSearchParams(hashParts[1] || '');
+  const urlPath = urlParams.get('path');
+  const initialPathToUse = urlPath || initialPath || '';
+
+  const [currentPath, setCurrentPath] = useState<string>(initialPathToUse);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Update URL when path changes
+  const updatePath = (newPath: string) => {
+    setCurrentPath(newPath);
+
+    // Parse current URL (handle hash routing)
+    const hash = window.location.hash;
+    const hashParts = hash.split('?');
+    const hashPath = hashParts[0]; // e.g., "#spaces"
+    const params = new URLSearchParams(hashParts[1] || '');
+
+    // Update path parameter
+    if (newPath) {
+      params.set('path', newPath);
+    } else {
+      params.delete('path');
+    }
+
+    // Reconstruct URL with hash
+    const newUrl = `${window.location.pathname}${hashPath}?${params.toString()}`;
+    window.history.pushState({}, '', newUrl);
+  };
 
   console.log('[MainView] SpaceContentView render:', {
     spaceName: space.name,
@@ -76,8 +105,9 @@ function SpaceContentView({ space, initialPath }: SpaceContentViewProps) {
       setFiles([]);
       setSelectedFile(null);
       setFileContent('');
-      setCurrentPath(initialPath);
+      updatePath(initialPath);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialPath, currentPath]);
 
   // Determine if current path is a file or directory
@@ -249,10 +279,11 @@ function SpaceContentView({ space, initialPath }: SpaceContentViewProps) {
     console.log('[MainView] File clicked:', file);
     if (file.type === 'directory') {
       console.log('[MainView] Navigating to directory:', file.path);
-      setCurrentPath(file.path);
+      updatePath(file.path);
       setSelectedFile(null);
     } else {
       console.log('[MainView] Opening file:', file.path);
+      updatePath(file.path); // Update URL with file path
       setSelectedFile(file);
     }
   };
@@ -260,7 +291,7 @@ function SpaceContentView({ space, initialPath }: SpaceContentViewProps) {
   const handleNavigateUp = () => {
     const pathParts = currentPath.split('/');
     pathParts.pop();
-    setCurrentPath(pathParts.join('/'));
+    updatePath(pathParts.join('/'));
     setSelectedFile(null);
   };
 
@@ -276,7 +307,7 @@ function SpaceContentView({ space, initialPath }: SpaceContentViewProps) {
           setSelectedFile(null);
           const pathParts = currentPath.split('/');
           pathParts.pop();
-          setCurrentPath(pathParts.join('/'));
+          updatePath(pathParts.join('/'));
         }}
       />
     );
