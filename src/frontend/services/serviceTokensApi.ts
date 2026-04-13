@@ -3,7 +3,7 @@ import { apiClient } from './apiClient';
 const API_BASE = '/api/service-tokens/v1';
 
 export interface ServiceToken {
-  id: number;
+  id: string; // UUID
   service_type: 'github' | 'bitbucket_server' | 'jira' | 'custom_header';
   base_url: string;
   username?: string;

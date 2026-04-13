@@ -48,7 +48,7 @@ export interface AuthState {
 }
 
 export interface ApiToken {
-  id: number;
+  id: string; // UUID
   name: string;
   token: string;
   createdAt: string;
@@ -94,15 +94,15 @@ export enum GitProvider {
 }
 
 export interface Space {
-  id: number;
+  id: string; // UUID
   slug: string;
   name: string;
   description: string;
 
   // Ownership
-  owner: number;
+  owner: number; // Django User ID (still integer)
   owner_username: string;
-  created_by: number | null;
+  created_by: number | null; // Django User ID (still integer)
   created_by_username: string | null;
 
   // Visibility
@@ -125,8 +125,8 @@ export interface Space {
 }
 
 export interface SpacePermission {
-  id: number;
-  space: number;
+  id: string; // UUID
+  space: string; // UUID
   spaceName: string;
   user: number;
   userUsername: string;
@@ -138,8 +138,8 @@ export interface SpacePermission {
 }
 
 export interface SpaceConfiguration {
-  id: number;
-  space: number;
+  id: string; // UUID
+  space: string; // UUID
   spaceSlug: string;
   spaceName: string;
 
@@ -171,8 +171,8 @@ export interface SpaceConfiguration {
 }
 
 export interface SpaceShortcut {
-  id: number;
-  space: number;
+  id: string; // UUID
+  space: string; // UUID
   spaceSlug: string;
   pageId: number;
   label: string;
@@ -183,10 +183,10 @@ export interface SpaceShortcut {
 }
 
 export interface UserSpacePreference {
-  id: number;
-  user: number;
+  id: string; // UUID
+  user: number; // Django User ID
   userUsername: string;
-  space: number;
+  space: string; // UUID
   spaceSlug: string;
   spaceName: string;
   isFavorite: boolean;
@@ -196,8 +196,8 @@ export interface UserSpacePreference {
 }
 
 export interface SpaceAttribute {
-  id: number;
-  space: number;
+  id: string; // UUID
+  space: string; // UUID
   spaceSlug: string;
   fieldId: string;
   fieldName: string;

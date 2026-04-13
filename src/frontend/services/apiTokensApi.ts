@@ -1,7 +1,7 @@
 import { apiClient } from './apiClient';
 
 export interface ApiToken {
-  id: number;
+  id: string; // UUID
   name: string;
   token?: string;
   created_at: string;
