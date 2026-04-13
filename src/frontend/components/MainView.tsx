@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Folder, FileText, Loader2 } from 'lucide-react';
+import { enrichmentApi, type EnrichmentsResponse } from '../services/enrichmentApi';
 import type { Space } from '../types';
 import { apiClient } from '../services/apiClient';
+import { FileViewer } from './FileViewer';
 
 // Loading Spinner Component
 function LoadingSpinner({ message = 'Loading...' }: { message?: string }) {
@@ -394,56 +396,74 @@ interface FileContentViewProps {
 }
 
 function FileContentView({ space, file, fileContent, isLoading, onBack }: FileContentViewProps) {
-  return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
-      {/* File Header */}
-      <div
-        className="flex items-center gap-3 px-6 py-4 border-b"
-        style={{
-          backgroundColor: 'var(--bg-secondary)',
-          borderColor: 'var(--border-color)',
-        }}
-      >
-        <button
-          onClick={onBack}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm rounded hover:opacity-80 transition-opacity"
-          style={{
-            backgroundColor: 'var(--bg-primary)',
-            color: 'var(--primary)',
-          }}
-        >
-          <ArrowLeft size={16} />
-          Back
-        </button>
-        <div>
-          <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-            {file.name}
-          </div>
-          <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-            {space.name} / {file.path}
-          </div>
-        </div>
-      </div>
+  const [enrichments, setEnrichments] = useState<EnrichmentsResponse>({});
 
-      {/* File Content */}
-      <div className="flex-1 overflow-auto">
-        {isLoading ? (
-          <LoadingSpinner message="Loading file content..." />
-        ) : (
-          <div className="max-w-5xl mx-auto p-8">
-            <pre
-              className="p-6 rounded-lg font-mono text-sm whitespace-pre-wrap"
-              style={{
-                backgroundColor: 'var(--card-bg)',
-                color: 'var(--text-primary)',
-              }}
-            >
-              {fileContent || 'No content available'}
-            </pre>
-          </div>
-        )}
-      </div>
-    </div>
+  // Load enrichments when file changes
+  useEffect(() => {
+    const loadEnrichments = async () => {
+      if (!file) {
+        return;
+      }
+
+      try {
+        const sourceUri = enrichmentApi.buildSourceUri(
+          space.git_provider || '',
+          space.git_base_url || '',
+          space.git_project_key || '',
+          space.git_repository_id || '',
+          space.git_default_branch || 'main',
+          file.path
+        );
+        const response = await enrichmentApi.getEnrichments(sourceUri);
+        console.log('[FileContentView] Loaded enrichments:', response);
+        setEnrichments(response || {});
+      } catch (error) {
+        console.error('[FileContentView] Failed to load enrichments:', error);
+        setEnrichments({});
+      }
+    };
+
+    loadEnrichments();
+  }, [file, space]);
+
+  const handleSave = async (newContent: string, description: string) => {
+    console.log('[FileContentView] Saving changes:', { file: file.path, description });
+
+    try {
+      // Create pending change via UserChanges API
+      const response = await apiClient.request('/api/wiki/v1/user-changes/', {
+        method: 'POST',
+        body: JSON.stringify({
+          space_id: space.id,
+          file_path: file.path,
+          content: newContent,
+          description,
+          status: 'pending',
+        }),
+      });
+
+      console.log('[FileContentView] Change submitted:', response);
+      alert('Changes submitted for approval!');
+    } catch (error) {
+      console.error('[FileContentView] Save failed:', error);
+      throw error;
+    }
+  };
+
+  if (isLoading) {
+    return <LoadingSpinner message="Loading file content..." />;
+  }
+
+  return (
+    <FileViewer
+      fileName={file.name}
+      filePath={file.path}
+      spaceName={space.name}
+      content={fileContent}
+      enrichments={enrichments}
+      onBack={onBack}
+      onSave={handleSave}
+    />
   );
 }
 

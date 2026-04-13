@@ -1,0 +1,327 @@
+import React, { useState } from 'react';
+import { X, MessageSquare, FileEdit, GitBranch, AlertCircle } from 'lucide-react';
+import DiffViewer from './DiffViewer';
+import type { EnrichmentsResponse } from '../services/enrichmentApi';
+
+interface EnrichmentPanelProps {
+  enrichments: EnrichmentsResponse;
+  fileName: string;
+  onClose: () => void;
+  onAcceptDiff?: (diffId: string) => void;
+  onRejectDiff?: (diffId: string) => void;
+}
+
+type EnrichmentTab = 'all' | 'comments' | 'diffs' | 'prs' | 'local';
+
+export default function EnrichmentPanel({
+  enrichments,
+  fileName,
+  onClose,
+  onAcceptDiff,
+  onRejectDiff,
+}: EnrichmentPanelProps) {
+  const [activeTab, setActiveTab] = useState<EnrichmentTab>('all');
+
+  const tabs: Array<{ id: EnrichmentTab; label: string; icon: React.ReactNode; count: number }> = [
+    {
+      id: 'all',
+      label: 'All',
+      icon: <AlertCircle size={16} />,
+      count:
+        (enrichments.comments?.length || 0) +
+        (enrichments.diff?.length || 0) +
+        (enrichments.pr_diff?.length || 0) +
+        (enrichments.local_changes?.length || 0),
+    },
+    {
+      id: 'comments',
+      label: 'Comments',
+      icon: <MessageSquare size={16} />,
+      count: enrichments.comments?.length || 0,
+    },
+    {
+      id: 'diffs',
+      label: 'Diffs',
+      icon: <FileEdit size={16} />,
+      count: enrichments.diff?.length || 0,
+    },
+    {
+      id: 'prs',
+      label: 'PRs',
+      icon: <GitBranch size={16} />,
+      count: enrichments.pr_diff?.length || 0,
+    },
+    {
+      id: 'local',
+      label: 'Local',
+      icon: <AlertCircle size={16} />,
+      count: enrichments.local_changes?.length || 0,
+    },
+  ];
+
+  const shouldShowTab = (tab: EnrichmentTab) => {
+    if (tab === 'all') {
+      return true;
+    }
+    const tabData = tabs.find(t => t.id === tab);
+    return (tabData?.count || 0) > 0;
+  };
+
+  return (
+    <div
+      className="flex flex-col h-full"
+      style={{
+        backgroundColor: 'var(--bg-primary)',
+      }}
+    >
+      {/* Header */}
+      <div
+        className="flex items-center justify-between px-4 py-3 border-b"
+        style={{
+          backgroundColor: 'var(--bg-secondary)',
+          borderColor: 'var(--border-color)',
+        }}
+      >
+        <h3 className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+          Enrichments
+        </h3>
+        <button
+          onClick={onClose}
+          className="hover:opacity-80 transition-opacity"
+          style={{ color: 'var(--text-secondary)' }}
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      {/* Tabs */}
+      <div
+        className="flex border-b overflow-x-auto"
+        style={{
+          borderColor: 'var(--border-color)',
+        }}
+      >
+        {tabs
+          .filter(tab => shouldShowTab(tab.id))
+          .map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className="flex items-center gap-2 px-4 py-2 text-sm whitespace-nowrap transition-colors border-b-2"
+              style={{
+                color: activeTab === tab.id ? 'var(--text-primary)' : 'var(--text-secondary)',
+                borderColor: activeTab === tab.id ? '#0066cc' : 'transparent',
+                backgroundColor: activeTab === tab.id ? 'var(--bg-tertiary)' : 'transparent',
+              }}
+            >
+              {tab.icon}
+              {tab.label}
+              {tab.count > 0 && (
+                <span
+                  className="px-1.5 py-0.5 text-xs rounded"
+                  style={{
+                    backgroundColor: activeTab === tab.id ? '#0066cc' : 'var(--bg-tertiary)',
+                    color: activeTab === tab.id ? 'white' : 'var(--text-secondary)',
+                  }}
+                >
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-auto p-4">
+        {/* Comments */}
+        {(activeTab === 'all' || activeTab === 'comments') &&
+          enrichments.comments &&
+          enrichments.comments.length > 0 && (
+            <div className="space-y-3 mb-6">
+              <h4 className="font-medium text-sm" style={{ color: 'var(--text-secondary)' }}>
+                Comments ({enrichments.comments.length})
+              </h4>
+              {enrichments.comments.map(comment => (
+                <div
+                  key={comment.id}
+                  className="p-3 rounded border"
+                  style={{
+                    borderColor: 'var(--border-color)',
+                    backgroundColor: 'var(--bg-secondary)',
+                  }}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <MessageSquare
+                        size={14}
+                        style={{
+                          color: comment.is_resolved ? '#4caf50' : '#ff9800',
+                        }}
+                      />
+                      <span
+                        className="text-xs font-medium"
+                        style={{ color: 'var(--text-secondary)' }}
+                      >
+                        Lines {comment.line_start}-{comment.line_end}
+                      </span>
+                      {comment.is_resolved && (
+                        <span
+                          className="text-xs px-1.5 py-0.5 rounded"
+                          style={{
+                            backgroundColor: '#e8f5e9',
+                            color: '#2e7d32',
+                          }}
+                        >
+                          Resolved
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                      {comment.author}
+                    </span>
+                  </div>
+                  <p className="text-sm" style={{ color: 'var(--text-primary)' }}>
+                    {comment.text}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+
+        {/* Diffs */}
+        {(activeTab === 'all' || activeTab === 'diffs') &&
+          enrichments.diff &&
+          enrichments.diff.length > 0 && (
+            <div className="space-y-4 mb-6">
+              <h4 className="font-medium text-sm" style={{ color: 'var(--text-secondary)' }}>
+                Pending Changes ({enrichments.diff.length})
+              </h4>
+              {enrichments.diff.map(diff => (
+                <DiffViewer
+                  key={diff.id}
+                  diff={diff}
+                  fileName={fileName}
+                  onAccept={onAcceptDiff}
+                  onReject={onRejectDiff}
+                />
+              ))}
+            </div>
+          )}
+
+        {/* PRs */}
+        {(activeTab === 'all' || activeTab === 'prs') &&
+          enrichments.pr_diff &&
+          enrichments.pr_diff.length > 0 && (
+            <div className="space-y-3 mb-6">
+              <h4 className="font-medium text-sm" style={{ color: 'var(--text-secondary)' }}>
+                Pull Requests ({enrichments.pr_diff.length})
+              </h4>
+              {enrichments.pr_diff.map(pr => (
+                <div
+                  key={pr.pr_number}
+                  className="p-3 rounded border"
+                  style={{
+                    borderColor: 'var(--border-color)',
+                    backgroundColor: 'var(--bg-secondary)',
+                  }}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <GitBranch size={14} style={{ color: '#9c27b0' }} />
+                      <span
+                        className="text-sm font-medium"
+                        style={{ color: 'var(--text-primary)' }}
+                      >
+                        PR #{pr.pr_number}
+                      </span>
+                      <span
+                        className="text-xs px-1.5 py-0.5 rounded"
+                        style={{
+                          backgroundColor: '#f3e5f5',
+                          color: '#7b1fa2',
+                        }}
+                      >
+                        {pr.pr_state}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-sm mb-2" style={{ color: 'var(--text-primary)' }}>
+                    {pr.pr_title}
+                  </p>
+                  <div
+                    className="flex items-center justify-between text-xs"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
+                    <span>by {pr.pr_author}</span>
+                    <a
+                      href={pr.pr_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:underline"
+                      style={{ color: '#0066cc' }}
+                    >
+                      View PR →
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+        {/* Local Changes */}
+        {(activeTab === 'all' || activeTab === 'local') &&
+          enrichments.local_changes &&
+          enrichments.local_changes.length > 0 && (
+            <div className="space-y-3 mb-6">
+              <h4 className="font-medium text-sm" style={{ color: 'var(--text-secondary)' }}>
+                Local Changes ({enrichments.local_changes.length})
+              </h4>
+              {enrichments.local_changes.map(change => (
+                <div
+                  key={change.id}
+                  className="p-3 rounded border"
+                  style={{
+                    borderColor: 'var(--border-color)',
+                    backgroundColor: 'var(--bg-secondary)',
+                  }}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle size={14} style={{ color: '#ff5722' }} />
+                      <span
+                        className="text-sm font-medium"
+                        style={{ color: 'var(--text-primary)' }}
+                      >
+                        {change.file_path}
+                      </span>
+                      <span
+                        className="text-xs px-1.5 py-0.5 rounded"
+                        style={{
+                          backgroundColor: '#fff3e0',
+                          color: '#e65100',
+                        }}
+                      >
+                        {change.status}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                    {change.commit_message}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+
+        {/* Empty State */}
+        {tabs.find(t => t.id === activeTab)?.count === 0 && (
+          <div className="text-center py-12">
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+              No {activeTab === 'all' ? 'enrichments' : activeTab} found
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
