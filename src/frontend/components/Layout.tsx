@@ -5,6 +5,7 @@ import type { Space, UserSpacePreference } from '../types';
 import spaceApi from '../services/spaceApi';
 import { User, LogOut, X, ChevronDown, Menu, Home, Settings, Star, Clock } from 'lucide-react';
 import SpaceTree from './SpaceTree';
+import MainView from './MainView';
 
 interface LayoutProps {
   navigate: (view: string) => void;
@@ -489,32 +490,10 @@ export default function Layout({ navigate, children }: LayoutProps) {
           </button>
         </div>
 
-        <main>
-          {selectedSpace && selectedPath ? (
-            <div className="p-8">
-              <div className="max-w-4xl mx-auto">
-                <div className="mb-4 text-sm" style={{ color: 'var(--text-muted)' }}>
-                  {selectedSpace.name} / {selectedPath}
-                </div>
-                <div
-                  className="p-8 rounded-lg text-center"
-                  style={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border)' }}
-                >
-                  <div
-                    className="text-lg font-semibold mb-2"
-                    style={{ color: 'var(--text-primary)' }}
-                  >
-                    Page View Coming Soon
-                  </div>
-                  <div className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                    This will display the rendered markdown content for: <code>{selectedPath}</code>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            children
-          )}
+        <main className="flex-1 flex flex-col overflow-hidden">
+          <MainView selectedSpace={selectedSpace} selectedPath={selectedPath}>
+            {children}
+          </MainView>
         </main>
       </div>
     </div>

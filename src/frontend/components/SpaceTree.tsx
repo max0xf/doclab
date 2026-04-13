@@ -47,21 +47,17 @@ export default function SpaceTree({ space, spaceName, onSelectFile }: SpaceTreeP
       setError(null);
 
       // Construct repository ID based on provider
-      let repoId = space.git_repository_id;
-      if (space.git_provider === 'bitbucket_server' && space.git_project_key) {
-        // Bitbucket expects: project_key_repo_slug
-        repoId = `${space.git_project_key}_${space.git_repository_id}`;
-      }
-
       const params = new URLSearchParams({
-        provider: space.git_provider,
-        base_url: space.git_base_url,
-        branch: space.git_default_branch,
+        provider: space.git_provider || '',
+        base_url: space.git_base_url || '',
+        project_key: space.git_project_key || '',
+        repo_slug: space.git_repository_id || '',
+        branch: space.git_default_branch || 'main',
         recursive: 'false', // Don't fetch recursively - load on demand
       });
 
       const result = await apiClient.request<TreeNode[]>(
-        `/api/git-provider/v1/repositories/${repoId}/tree?${params.toString()}`
+        `/api/git-provider/v1/tree?${params.toString()}`
       );
 
       // Sort: directories first, then files, both alphabetically
@@ -115,21 +111,18 @@ export default function SpaceTree({ space, spaceName, onSelectFile }: SpaceTreeP
 
   const loadSubdirectory = async (path: string, _node: TreeNode) => {
     try {
-      let repoId = space.git_repository_id;
-      if (space.git_provider === 'bitbucket_server' && space.git_project_key) {
-        repoId = `${space.git_project_key}_${space.git_repository_id}`;
-      }
-
       const params = new URLSearchParams({
-        provider: space.git_provider!,
-        base_url: space.git_base_url!,
-        branch: space.git_default_branch!,
+        provider: space.git_provider || '',
+        base_url: space.git_base_url || '',
+        project_key: space.git_project_key || '',
+        repo_slug: space.git_repository_id || '',
+        branch: space.git_default_branch || 'main',
         recursive: 'false',
         path: path,
       });
 
       const result = await apiClient.request<TreeNode[]>(
-        `/api/git-provider/v1/repositories/${repoId}/tree?${params.toString()}`
+        `/api/git-provider/v1/tree?${params.toString()}`
       );
 
       // Fix paths - API returns relative paths, we need full paths
@@ -179,9 +172,21 @@ export default function SpaceTree({ space, spaceName, onSelectFile }: SpaceTreeP
       <div key={node.path}>
         <button
           onClick={() => {
+            console.log('[SpaceTree] Item clicked:', {
+              path: node.path,
+              type: node.type,
+              isDirectory,
+              hasOnSelectFile: !!onSelectFile,
+            });
+
             if (isDirectory) {
+              console.log('[SpaceTree] Expanding directory:', node.path);
               toggleExpand(node.path, node);
+              // Also notify parent to update main view
+              console.log('[SpaceTree] Calling onSelectFile for directory:', node.path);
+              onSelectFile?.(node.path);
             } else {
+              console.log('[SpaceTree] Calling onSelectFile for file:', node.path);
               onSelectFile?.(node.path);
             }
           }}

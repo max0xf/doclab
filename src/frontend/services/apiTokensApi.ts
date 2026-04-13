@@ -35,7 +35,7 @@ export const apiTokensApi = {
   /**
    * Delete an API token
    */
-  delete: async (id: number): Promise<void> => {
+  delete: async (id: string): Promise<void> => {
     return apiClient.request(`/api/user_management/v1/tokens/${id}`, {
       method: 'DELETE',
     });

@@ -179,20 +179,20 @@ export const repositoryApi = {
       body: JSON.stringify({ name }),
     }),
 
-  deleteToken: (id: number): Promise<void> =>
+  deleteToken: (id: string): Promise<void> =>
     apiClient.request(`/api/user_management/v1/tokens/${id}/`, {
       method: 'DELETE',
     }),
 
   // Favorites
-  getFavorites: async (): Promise<Array<{ id: number; repository_id: string }>> => {
-    return apiClient.request<Array<{ id: number; repository_id: string }>>(
+  getFavorites: async (): Promise<Array<{ id: string; repository_id: string }>> => {
+    return apiClient.request<Array<{ id: string; repository_id: string }>>(
       '/api/user_management/v1/favorites'
     );
   },
 
-  addFavorite: async (repositoryId: string): Promise<{ id: number; repository_id: string }> => {
-    return apiClient.request<{ id: number; repository_id: string }>(
+  addFavorite: async (repositoryId: string): Promise<{ id: string; repository_id: string }> => {
+    return apiClient.request<{ id: string; repository_id: string }>(
       '/api/user_management/v1/favorites',
       {
         method: 'POST',
@@ -201,15 +201,15 @@ export const repositoryApi = {
     );
   },
 
-  removeFavorite: async (favoriteId: number): Promise<void> => {
+  removeFavorite: async (favoriteId: string): Promise<void> => {
     await apiClient.request(`/api/user_management/v1/favorites/${favoriteId}`, {
       method: 'DELETE',
     });
   },
 
   // Recent
-  getRecent: async (): Promise<Array<{ id: number; repository_id: string }>> => {
-    return apiClient.request<Array<{ id: number; repository_id: string }>>(
+  getRecent: async (): Promise<Array<{ id: string; repository_id: string }>> => {
+    return apiClient.request<Array<{ id: string; repository_id: string }>>(
       '/api/user_management/v1/recent'
     );
   },

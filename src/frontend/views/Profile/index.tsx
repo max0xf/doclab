@@ -70,7 +70,7 @@ export default function Profile() {
     }
   };
 
-  const handleDeleteToken = async (id: number, name: string) => {
+  const handleDeleteToken = async (id: string, name: string) => {
     if (!window.confirm(`Are you sure you want to delete the token "${name}"?`)) {
       return;
     }

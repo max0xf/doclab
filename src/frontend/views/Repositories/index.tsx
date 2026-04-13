@@ -18,7 +18,7 @@ export default function Repositories() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [favorites, setFavorites] = useState<Array<{ id: number; repository_id: string }>>([]);
+  const [favorites, setFavorites] = useState<Array<{ id: string; repository_id: string }>>([]);
   const [repoIdFromUrl, setRepoIdFromUrl] = useState<string | null>(null);
   const [provider, setProvider] = useState<{ type: string; baseUrl: string } | null>(null);
 
