@@ -38,11 +38,11 @@ export default function Dashboard({ navigate }: DashboardProps) {
   };
 
   const handleToggleFavorite = async (spaceSlug: string) => {
-    const isFavorite = favorites.some(f => f.spaceSlug === spaceSlug);
+    const isFavorite = favorites.some(f => f.space_slug === spaceSlug);
     try {
       if (isFavorite) {
         await spaceApi.removeFromFavorites(spaceSlug);
-        setFavorites(favorites.filter(f => f.spaceSlug !== spaceSlug));
+        setFavorites(favorites.filter(f => f.space_slug !== spaceSlug));
       } else {
         const newPref = await spaceApi.addToFavorites(spaceSlug);
         setFavorites([...favorites, newPref]);
@@ -76,11 +76,11 @@ export default function Dashboard({ navigate }: DashboardProps) {
   }
 
   const favoriteSpaces = favorites
-    .map(f => allSpaces.find(s => s.slug === f.spaceSlug))
+    .map(f => allSpaces.find(s => s.slug === f.space_slug))
     .filter(Boolean) as Space[];
   const recentSpaces = recent
-    .filter(r => !favorites.some(f => f.spaceSlug === r.spaceSlug))
-    .map(r => allSpaces.find(s => s.slug === r.spaceSlug))
+    .filter(r => !favorites.some(f => f.space_slug === r.space_slug))
+    .map(r => allSpaces.find(s => s.slug === r.space_slug))
     .filter(Boolean)
     .slice(0, 6) as Space[];
 

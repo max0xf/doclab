@@ -34,7 +34,7 @@ export default function SpaceConfiguration() {
   };
 
   const handleToggleFavorite = async (space: Space) => {
-    const isFavorite = favorites.some(f => f.spaceSlug === space.slug);
+    const isFavorite = favorites.some(f => f.space_slug === space.slug);
     try {
       if (isFavorite) {
         await spaceApi.removeFromFavorites(space.slug);
@@ -299,7 +299,7 @@ export default function SpaceConfiguration() {
                           onClick={() => handleToggleFavorite(space)}
                           className="p-2 rounded-lg transition-all"
                           style={{
-                            color: favorites.some(f => f.spaceSlug === space.slug)
+                            color: favorites.some(f => f.space_slug === space.slug)
                               ? 'var(--warning)'
                               : 'var(--text-muted)',
                           }}
@@ -310,7 +310,7 @@ export default function SpaceConfiguration() {
                             e.currentTarget.style.backgroundColor = 'transparent';
                           }}
                           title={
-                            favorites.some(f => f.spaceSlug === space.slug)
+                            favorites.some(f => f.space_slug === space.slug)
                               ? 'Remove from favorites'
                               : 'Add to favorites'
                           }
@@ -318,7 +318,7 @@ export default function SpaceConfiguration() {
                           <Star
                             size={16}
                             fill={
-                              favorites.some(f => f.spaceSlug === space.slug)
+                              favorites.some(f => f.space_slug === space.slug)
                                 ? 'currentColor'
                                 : 'none'
                             }

@@ -9,6 +9,7 @@ export interface ServiceToken {
   username?: string;
   header_name?: string;
   name?: string;
+  has_token: boolean; // Indicates if token is configured (without exposing the actual token)
   created_at: string;
   updated_at: string;
 }

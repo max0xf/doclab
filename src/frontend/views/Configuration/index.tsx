@@ -41,7 +41,7 @@ export default function Configuration() {
   const getTokenRow = (serviceType: TokenRow['serviceType'], serviceName: string): TokenRow => {
     const token = tokens.find(t => t.service_type === serviceType);
 
-    if (token) {
+    if (token && token.has_token) {
       return {
         service: serviceName,
         serviceType,

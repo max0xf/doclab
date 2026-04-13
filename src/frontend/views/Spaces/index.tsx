@@ -40,13 +40,13 @@ export default function Spaces({ navigate }: SpacesProps) {
   };
 
   const handleToggleFavorite = async (spaceSlug: string) => {
-    const isFavorite = favorites.some(f => f.spaceSlug === spaceSlug);
+    const isFavorite = favorites.some(f => f.space_slug === spaceSlug);
     console.log('Toggle favorite for:', spaceSlug, 'Currently favorite:', isFavorite);
     console.log('Current favorites:', favorites);
     try {
       if (isFavorite) {
         await spaceApi.removeFromFavorites(spaceSlug);
-        const newFavorites = favorites.filter(f => f.spaceSlug !== spaceSlug);
+        const newFavorites = favorites.filter(f => f.space_slug !== spaceSlug);
         setFavorites(newFavorites);
         console.log('Removed from favorites, new favorites:', newFavorites);
       } else {
@@ -79,10 +79,10 @@ export default function Spaces({ navigate }: SpacesProps) {
   );
 
   const favoriteSpaces = filteredSpaces.filter(space =>
-    favorites.some(f => f.spaceSlug === space.slug)
+    favorites.some(f => f.space_slug === space.slug)
   );
   const otherSpaces = filteredSpaces.filter(
-    space => !favorites.some(f => f.spaceSlug === space.slug)
+    space => !favorites.some(f => f.space_slug === space.slug)
   );
 
   if (loading) {
@@ -233,7 +233,7 @@ export default function Spaces({ navigate }: SpacesProps) {
                   <SpaceCard
                     key={space.id}
                     space={space}
-                    isFavorite={favorites.some(f => f.spaceSlug === space.slug)}
+                    isFavorite={favorites.some(f => f.space_slug === space.slug)}
                     onNavigate={() => handleNavigateToSpace(space.slug)}
                     onToggleFavorite={() => handleToggleFavorite(space.slug)}
                   />
@@ -245,7 +245,7 @@ export default function Spaces({ navigate }: SpacesProps) {
                   <SpaceListItem
                     key={space.id}
                     space={space}
-                    isFavorite={favorites.some(f => f.spaceSlug === space.slug)}
+                    isFavorite={favorites.some(f => f.space_slug === space.slug)}
                     onNavigate={() => handleNavigateToSpace(space.slug)}
                     onToggleFavorite={() => handleToggleFavorite(space.slug)}
                   />

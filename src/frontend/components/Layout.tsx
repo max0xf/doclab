@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { Urls } from '../types';
 import type { Space, UserSpacePreference } from '../types';
 import spaceApi from '../services/spaceApi';
-import { User, LogOut, X, ChevronDown, Menu, Home, Settings, Star, Clock } from 'lucide-react';
+import { User, LogOut, X, ChevronDown, Menu, Home, Settings, Star } from 'lucide-react';
 import SpaceTree from './SpaceTree';
 import MainView from './MainView';
 
@@ -17,6 +17,7 @@ export default function Layout({ navigate, children }: LayoutProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mySpacesExpanded, setMySpacesExpanded] = useState(true);
   const [favorites, setFavorites] = useState<UserSpacePreference[]>([]);
   const [recent, setRecent] = useState<UserSpacePreference[]>([]);
   const [allSpaces, setAllSpaces] = useState<Space[]>([]);
@@ -54,18 +55,30 @@ export default function Layout({ navigate, children }: LayoutProps) {
 
   // Handle hash changes separately
   useEffect(() => {
-    const handleHashChange = () => {
+    const handleHashChange = async () => {
       const urlParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
       const spaceSlug = urlParams.get('space');
       if (spaceSlug && allSpaces.length > 0) {
         const space = allSpaces.find(s => s.slug === spaceSlug);
         setSelectedSpace(space || null);
+
+        // Mark as visited and reload recent
+        if (space) {
+          try {
+            await spaceApi.markVisited(spaceSlug);
+            const recentSpaces = await spaceApi.listRecent(10);
+            setRecent(recentSpaces);
+          } catch (error) {
+            console.error('Failed to mark space as visited:', error);
+          }
+        }
       } else {
         setSelectedSpace(null);
       }
     };
 
     window.addEventListener('hashchange', handleHashChange);
+    handleHashChange(); // Call immediately on mount
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [allSpaces]);
 
@@ -89,11 +102,11 @@ export default function Layout({ navigate, children }: LayoutProps) {
 
   // Will be used when we add favorite toggle buttons to space items
   const _handleToggleFavorite = async (spaceSlug: string) => {
-    const pref = favorites.find(f => f.spaceSlug === spaceSlug);
+    const pref = favorites.find(f => f.space_slug === spaceSlug);
     try {
       if (pref) {
         await spaceApi.removeFromFavorites(spaceSlug);
-        setFavorites(favorites.filter(f => f.spaceSlug !== spaceSlug));
+        setFavorites(favorites.filter(f => f.space_slug !== spaceSlug));
       } else {
         const newPref = await spaceApi.addToFavorites(spaceSlug);
         setFavorites([...favorites, newPref]);
@@ -205,56 +218,31 @@ export default function Layout({ navigate, children }: LayoutProps) {
           {/* My Spaces Section */}
           {!sidebarCollapsed && !loading && (
             <div className="mt-4">
-              <div
-                className="px-4 py-1.5 text-xs font-semibold uppercase"
-                style={{ color: 'var(--text-muted)' }}
-              >
-                My Spaces
-              </div>
-
-              {/* Browse All Spaces */}
-              <button
-                onClick={() => {
-                  navigate(Urls.Spaces);
-                  setSidebarOpen(false);
-                }}
-                className="w-full flex items-center py-2 px-4 mx-2 text-sm transition-all rounded-md"
-                style={{
-                  backgroundColor:
-                    currentView === Urls.Spaces && !selectedSpace
-                      ? 'var(--sidebar-active)'
-                      : undefined,
-                  color:
-                    currentView === Urls.Spaces && !selectedSpace
-                      ? 'var(--sidebar-text-active)'
-                      : 'var(--sidebar-text)',
-                }}
-                onMouseEnter={e => {
-                  if (!(currentView === Urls.Spaces && !selectedSpace)) {
-                    e.currentTarget.style.backgroundColor = 'var(--sidebar-hover)';
-                  }
-                }}
-                onMouseLeave={e => {
-                  if (!(currentView === Urls.Spaces && !selectedSpace)) {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                  }
-                }}
-              >
-                Browse
-              </button>
-
-              {/* Favorites */}
-              <div className="mt-2">
-                <div
-                  className="px-4 py-1 text-xs font-medium flex items-center gap-1"
+              <div className="w-full flex items-center justify-between px-4 py-1.5">
+                <button
+                  onClick={() => navigate(Urls.Spaces)}
+                  className="flex-1 text-left text-xs font-semibold uppercase hover:opacity-80 transition-opacity"
                   style={{ color: 'var(--text-muted)' }}
                 >
-                  <Star className="w-3 h-3" />
-                  Starred
-                </div>
-                {favorites.length > 0 ? (
-                  favorites.map(pref => {
-                    const space = allSpaces.find(s => s.slug === pref.spaceSlug);
+                  My Spaces
+                </button>
+                <button
+                  onClick={() => setMySpacesExpanded(!mySpacesExpanded)}
+                  className="p-1 hover:bg-sidebar-hover rounded transition-colors"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  <ChevronDown
+                    className={`w-4 h-4 transition-transform ${mySpacesExpanded ? '' : '-rotate-90'}`}
+                  />
+                </button>
+              </div>
+
+              {/* Favorites and Recent - plain list without delimiters */}
+              {mySpacesExpanded && (
+                <>
+                  {/* Favorites with star icon */}
+                  {favorites.map(pref => {
+                    const space = allSpaces.find(s => s.slug === pref.space_slug);
                     if (!space) {
                       return null;
                     }
@@ -264,51 +252,37 @@ export default function Layout({ navigate, children }: LayoutProps) {
                       <button
                         key={space.id}
                         onClick={() => handleSelectSpace(space)}
-                        className={`w-full flex items-center py-2 px-4 mx-2 text-sm transition-all rounded-md ${
-                          isSelected
-                            ? 'bg-sidebar-active text-sidebar-text-active'
-                            : 'hover:bg-sidebar-hover'
-                        }`}
+                        className="w-full flex items-center gap-2 py-1 px-3 text-xs transition-all rounded"
                         style={{
                           backgroundColor: isSelected ? 'var(--sidebar-active)' : undefined,
                           color: isSelected ? 'var(--sidebar-text-active)' : 'var(--sidebar-text)',
                         }}
+                        onMouseEnter={e => {
+                          if (!isSelected) {
+                            e.currentTarget.style.backgroundColor = 'var(--sidebar-hover)';
+                          }
+                        }}
+                        onMouseLeave={e => {
+                          if (!isSelected) {
+                            e.currentTarget.style.backgroundColor = 'transparent';
+                          }
+                        }}
                       >
-                        <div className="w-8 h-8 rounded bg-primary text-white flex items-center justify-center mr-2 text-xs font-bold">
+                        <div className="w-5 h-5 rounded bg-primary text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
                           {space.name.charAt(0).toUpperCase()}
                         </div>
-                        <div className="flex-1 text-left truncate">
-                          <div className="font-medium truncate">{space.name}</div>
-                          <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                            {space.page_count} pages
-                          </div>
-                        </div>
+                        <div className="flex-1 truncate font-medium">{space.name}</div>
+                        <Star className="w-3 h-3 fill-yellow-400 text-yellow-400 flex-shrink-0" />
                       </button>
                     );
-                  })
-                ) : (
-                  <div className="px-4 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>
-                    No starred spaces
-                  </div>
-                )}
-              </div>
+                  })}
 
-              {/* Recent (non-favorites) */}
-              <div className="mt-2">
-                <div
-                  className="px-4 py-1 text-xs font-medium flex items-center gap-1"
-                  style={{ color: 'var(--text-muted)' }}
-                >
-                  <Clock className="w-3 h-3" />
-                  Recent
-                </div>
-                {recent.filter(r => !favorites.some(f => f.spaceSlug === r.spaceSlug)).length >
-                0 ? (
-                  recent
-                    .filter(r => !favorites.some(f => f.spaceSlug === r.spaceSlug))
+                  {/* Recent (non-favorites) with subtle styling */}
+                  {recent
+                    .filter(r => !favorites.some(f => f.space_slug === r.space_slug))
                     .slice(0, 5)
                     .map(pref => {
-                      const space = allSpaces.find(s => s.slug === pref.spaceSlug);
+                      const space = allSpaces.find(s => s.slug === pref.space_slug);
                       if (!space) {
                         return null;
                       }
@@ -318,42 +292,36 @@ export default function Layout({ navigate, children }: LayoutProps) {
                         <button
                           key={space.id}
                           onClick={() => handleSelectSpace(space)}
-                          className="w-full flex items-center py-2 px-4 mx-2 text-sm transition-all rounded-md"
+                          className="w-full flex items-center gap-2 py-1 px-3 text-xs transition-all rounded"
                           style={{
                             backgroundColor: isSelected ? 'var(--sidebar-active)' : undefined,
                             color: isSelected
                               ? 'var(--sidebar-text-active)'
                               : 'var(--sidebar-text)',
+                            opacity: 0.7,
                           }}
                           onMouseEnter={e => {
                             if (!isSelected) {
                               e.currentTarget.style.backgroundColor = 'var(--sidebar-hover)';
                             }
+                            e.currentTarget.style.opacity = '1';
                           }}
                           onMouseLeave={e => {
                             if (!isSelected) {
                               e.currentTarget.style.backgroundColor = 'transparent';
                             }
+                            e.currentTarget.style.opacity = '0.7';
                           }}
                         >
-                          <div className="w-8 h-8 rounded bg-primary text-white flex items-center justify-center mr-2 text-xs font-bold">
+                          <div className="w-5 h-5 rounded bg-primary text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
                             {space.name.charAt(0).toUpperCase()}
                           </div>
-                          <div className="flex-1 text-left truncate">
-                            <div className="font-medium truncate">{space.name}</div>
-                            <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                              {space.page_count} pages
-                            </div>
-                          </div>
+                          <div className="flex-1 truncate font-medium">{space.name}</div>
                         </button>
                       );
-                    })
-                ) : (
-                  <div className="px-4 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>
-                    No recent spaces
-                  </div>
-                )}
-              </div>
+                    })}
+                </>
+              )}
             </div>
           )}
 

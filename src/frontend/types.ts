@@ -185,14 +185,14 @@ export interface SpaceShortcut {
 export interface UserSpacePreference {
   id: string; // UUID
   user: number; // Django User ID
-  userUsername: string;
+  user_username: string;
   space: string; // UUID
-  spaceSlug: string;
-  spaceName: string;
-  isFavorite: boolean;
-  lastVisitedAt: string;
-  visitCount: number;
-  lastViewedPageId: number | null;
+  space_slug: string;
+  space_name: string;
+  is_favorite: boolean;
+  last_visited_at: string;
+  visit_count: number;
+  last_viewed_page_id: number | null;
 }
 
 export interface SpaceAttribute {
