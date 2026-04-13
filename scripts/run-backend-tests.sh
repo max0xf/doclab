@@ -101,7 +101,7 @@ echo ""
 
 # Parse command line arguments
 TEST_PATH="src/integration_tests/"
-PYTEST_ARGS="-v"
+PYTEST_ARGS="-v -rs"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
