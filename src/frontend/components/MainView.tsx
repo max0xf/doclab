@@ -205,12 +205,53 @@ function SpaceContentView({ space, initialPath }: SpaceContentViewProps) {
     loadContent();
   }, [space, currentPath]);
 
+  // Load file content when a file is selected
+  useEffect(() => {
+    const loadFileContent = async () => {
+      if (!selectedFile || selectedFile.type === 'directory') {
+        return;
+      }
+
+      console.log('[MainView] Loading file content for:', selectedFile.path);
+      setIsLoading(true);
+      setFileContent('');
+
+      try {
+        const params = new URLSearchParams({
+          provider: space.git_provider || '',
+          base_url: space.git_base_url || '',
+          project_key: space.git_project_key || '',
+          repo_slug: space.git_repository_id || '',
+          file_path: selectedFile.path,
+          branch: space.git_default_branch || 'main',
+        });
+
+        const response = await apiClient.request<any>(
+          `/api/git-provider/v1/file?${params.toString()}`
+        );
+
+        console.log('File content response:', response);
+        setFileContent(response.content || '');
+      } catch (error) {
+        console.error('Failed to load file content:', error);
+        setFileContent('');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadFileContent();
+  }, [space, selectedFile]);
+
   const handleFileClick = (file: FileItem) => {
+    console.log('[MainView] File clicked:', file);
     if (file.type === 'directory') {
+      console.log('[MainView] Navigating to directory:', file.path);
       setCurrentPath(file.path);
       setSelectedFile(null);
     } else {
-      setCurrentPath(file.path);
+      console.log('[MainView] Opening file:', file.path);
+      setSelectedFile(file);
     }
   };
 
