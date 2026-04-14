@@ -158,7 +158,7 @@ export function Comment({
             <Comment
               key={reply.id}
               comment={reply}
-              replies={[]} // Replies are already flattened in parent
+              replies={reply.replies || []} // Recursively render nested replies
               onDelete={onDelete}
               onResolve={onResolve}
               onReply={onReply}

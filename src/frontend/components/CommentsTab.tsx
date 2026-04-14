@@ -12,15 +12,8 @@ interface CommentsTabProps {
   onCommentsChange?: () => void;
 }
 
-interface CommentThread {
-  threadId: string;
-  comments: CommentEnrichment[];
-  lineStart: number;
-  lineEnd: number;
-}
-
 export function CommentsTab({
-  comments,
+  comments: _enrichmentComments,
   fileName: _fileName,
   sourceUri,
   selectedLines,
@@ -31,54 +24,41 @@ export function CommentsTab({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
   const [showDocCommentForm, setShowDocCommentForm] = useState(false);
+  const [docCommentsExpanded, setDocCommentsExpanded] = useState(true);
+  const [comments, setComments] = useState<CommentEnrichment[]>([]);
 
-  // Separate document-level comments from line comments
-  const lineComments = comments.filter(c => c.line_start || c.line_end);
-
-  // Build comment tree for document comments
-  const buildCommentTree = (allComments: CommentEnrichment[]) => {
-    const rootComments = allComments.filter(c => !c.parent_id);
-    const getReplies = (parentId: number): CommentEnrichment[] => {
-      return allComments
-        .filter(c => c.parent_id === parentId)
-        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  // Fetch comments from comments API (returns nested structure with replies)
+  useEffect(() => {
+    const fetchComments = async () => {
+      try {
+        const response = await apiClient.request(
+          `/api/wiki/v1/comments/?source_uri=${encodeURIComponent(sourceUri)}`
+        );
+        setComments((response as CommentEnrichment[]) || []);
+      } catch (error) {
+        console.error('Failed to fetch comments:', error);
+        setComments([]);
+      }
     };
-    return { rootComments, getReplies };
-  };
+    fetchComments();
+  }, [sourceUri, onCommentsChange]);
 
-  const { rootComments: docRootComments, getReplies: getDocReplies } = buildCommentTree(
-    comments.filter(c => !c.line_start && !c.line_end)
-  );
+  // API returns root comments with nested replies in the 'replies' field
+  // Separate document-level comments from line comments
+  const docRootComments = comments.filter(c => !c.line_start && !c.line_end);
+  const lineRootComments = comments.filter(c => c.line_start || c.line_end);
 
-  // Group line comments by thread
-  const threads: CommentThread[] = [];
-  const threadMap = new Map<string, CommentThread>();
+  // Sort line comments by line number
+  lineRootComments.sort((a, b) => (a.line_start || 0) - (b.line_start || 0));
 
-  lineComments.forEach(comment => {
-    const threadId = comment.thread_id || String(comment.id);
-    if (!threadMap.has(threadId)) {
-      threadMap.set(threadId, {
-        threadId,
-        comments: [],
-        lineStart: comment.line_start || 0,
-        lineEnd: comment.line_end || 0,
-      });
-      threads.push(threadMap.get(threadId)!);
-    }
-    threadMap.get(threadId)!.comments.push(comment);
-  });
-
-  // Sort threads by line number
-  threads.sort((a, b) => a.lineStart - b.lineStart);
-
-  // Auto-expand selected thread
+  // Auto-expand selected comment
   useEffect(() => {
     if (selectedLines) {
-      const matchingThread = threads.find(
-        t => t.lineStart === selectedLines.start && t.lineEnd === selectedLines.end
+      const matchingComment = lineRootComments.find(
+        c => c.line_start === selectedLines.start && c.line_end === selectedLines.end
       );
-      if (matchingThread) {
-        setExpandedThreads(prev => new Set(prev).add(matchingThread.threadId));
+      if (matchingComment) {
+        setExpandedThreads(prev => new Set(prev).add(String(matchingComment.id)));
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -203,13 +183,6 @@ export function CommentsTab({
     });
   };
 
-  const formatLineRange = (thread: CommentThread) => {
-    if (thread.lineStart === thread.lineEnd) {
-      return `Line ${thread.lineStart}`;
-    }
-    return `Lines ${thread.lineStart}-${thread.lineEnd}`;
-  };
-
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Comment Threads - Scrollable */}
@@ -217,14 +190,17 @@ export function CommentsTab({
         {/* Document Comments Section */}
         <div className="mb-4">
           <div className="flex items-center justify-between mb-3">
-            <div
-              className="flex items-center gap-2 text-sm font-medium"
+            <button
+              type="button"
+              onClick={() => setDocCommentsExpanded(!docCommentsExpanded)}
+              className="flex items-center gap-2 text-sm font-medium hover:opacity-80"
               style={{ color: 'var(--text-primary)' }}
             >
+              {docCommentsExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
               <FileText size={16} />
               Document Comments ({docRootComments.length})
-            </div>
-            {!showDocCommentForm && (
+            </button>
+            {docCommentsExpanded && !showDocCommentForm && (
               <button
                 type="button"
                 onClick={() => setShowDocCommentForm(true)}
@@ -237,7 +213,7 @@ export function CommentsTab({
           </div>
 
           {/* Document Comment Form */}
-          {showDocCommentForm && (
+          {docCommentsExpanded && showDocCommentForm && (
             <div
               className="mb-3 p-3 border rounded-lg"
               style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}
@@ -288,7 +264,7 @@ export function CommentsTab({
           )}
 
           {/* Document Comments List */}
-          {docRootComments.length > 0 && (
+          {docCommentsExpanded && docRootComments.length > 0 && (
             <div className="space-y-2">
               {docRootComments.map(comment => (
                 <div
@@ -301,7 +277,7 @@ export function CommentsTab({
                 >
                   <Comment
                     comment={comment}
-                    replies={getDocReplies(comment.id)}
+                    replies={comment.replies || []}
                     onDelete={handleDeleteComment}
                     onResolve={handleResolveComment}
                     onReply={handleSubmitReply}
@@ -312,7 +288,7 @@ export function CommentsTab({
             </div>
           )}
 
-          {docRootComments.length === 0 && !showDocCommentForm && (
+          {docCommentsExpanded && docRootComments.length === 0 && !showDocCommentForm && (
             <div className="text-center py-4 text-xs" style={{ color: 'var(--text-secondary)' }}>
               No document comments yet
             </div>
@@ -320,25 +296,25 @@ export function CommentsTab({
         </div>
 
         {/* Line Comments Section */}
-        {threads.length > 0 && (
+        {lineRootComments.length > 0 && (
           <div className="border-t pt-4" style={{ borderColor: 'var(--border-color)' }}>
             <div className="text-sm font-medium mb-3" style={{ color: 'var(--text-primary)' }}>
-              Line Comments ({threads.length})
+              Line Comments ({lineRootComments.length})
             </div>
             <div className="space-y-3">
-              {threads.map(thread => {
-                const isExpanded = expandedThreads.has(thread.threadId);
+              {lineRootComments.map(comment => {
+                const commentId = String(comment.id);
+                const isExpanded = expandedThreads.has(commentId);
                 const isSelected =
                   selectedLines &&
-                  thread.lineStart === selectedLines.start &&
-                  thread.lineEnd === selectedLines.end;
-                const sortedComments = [...thread.comments].sort(
-                  (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-                );
+                  comment.line_start === selectedLines.start &&
+                  comment.line_end === selectedLines.end;
+                const replyCount = comment.replies?.length || 0;
+                const totalCount = 1 + replyCount;
 
                 return (
                   <div
-                    key={thread.threadId}
+                    key={comment.id}
                     className="border rounded-lg overflow-hidden"
                     style={{
                       borderColor: isSelected ? '#0066cc' : 'var(--border-color)',
@@ -346,10 +322,10 @@ export function CommentsTab({
                       borderWidth: isSelected ? '2px' : '1px',
                     }}
                   >
-                    {/* Thread Header */}
+                    {/* Comment Header */}
                     <button
                       type="button"
-                      onClick={() => toggleThread(thread.threadId)}
+                      onClick={() => toggleThread(commentId)}
                       className="w-full px-3 py-2 border-b text-xs font-medium flex items-center justify-between hover:opacity-80"
                       style={{
                         borderColor: 'var(--border-color)',
@@ -359,26 +335,20 @@ export function CommentsTab({
                     >
                       <span className="flex items-center gap-2">
                         {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                        {formatLineRange(thread)} • {thread.comments.length} comment
-                        {thread.comments.length > 1 ? 's' : ''}
+                        Line {comment.line_start} • {totalCount} comment{totalCount > 1 ? 's' : ''}
                       </span>
                     </button>
 
-                    {/* Thread Comments */}
+                    {/* Comment with Replies */}
                     {isExpanded && (
-                      <div>
-                        {sortedComments.map(comment => (
-                          <Comment
-                            key={comment.id}
-                            comment={comment}
-                            replies={[]}
-                            onDelete={handleDeleteComment}
-                            onResolve={handleResolveComment}
-                            onReply={handleSubmitReply}
-                            isSubmitting={isSubmitting}
-                          />
-                        ))}
-                      </div>
+                      <Comment
+                        comment={comment}
+                        replies={comment.replies || []}
+                        onDelete={handleDeleteComment}
+                        onResolve={handleResolveComment}
+                        onReply={handleSubmitReply}
+                        isSubmitting={isSubmitting}
+                      />
                     )}
                   </div>
                 );
@@ -387,7 +357,7 @@ export function CommentsTab({
           </div>
         )}
 
-        {threads.length === 0 && docRootComments.length === 0 && (
+        {lineRootComments.length === 0 && docRootComments.length === 0 && (
           <div className="text-center py-8" style={{ color: 'var(--text-secondary)' }}>
             <div className="text-sm">No comments yet</div>
             {!selectedLines && <div className="text-xs mt-1">Click a line to add a comment</div>}
@@ -406,10 +376,9 @@ export function CommentsTab({
         >
           <div className="text-xs font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
             Add comment to{' '}
-            {formatLineRange({
-              lineStart: selectedLines.start,
-              lineEnd: selectedLines.end,
-            } as CommentThread)}
+            {selectedLines.start === selectedLines.end
+              ? `Line ${selectedLines.start}`
+              : `Lines ${selectedLines.start}-${selectedLines.end}`}
           </div>
           <textarea
             value={newCommentText}
