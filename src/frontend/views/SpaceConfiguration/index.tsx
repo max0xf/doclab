@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Edit2, Trash2, Plus, Search, Star } from 'lucide-react';
+import { Edit2, Trash2, Plus, Search, Star, FolderTree } from 'lucide-react';
 import spaceApi from '../../services/spaceApi';
 import CreateSpaceModal from '../../components/CreateSpaceModal';
 import EditSpaceModal from '../../components/EditSpaceModal';
+import FileMappingConfiguration from '../../components/FileMappingConfiguration';
 import type { Space, UserSpacePreference } from '../../types';
 
 export default function SpaceConfiguration() {
@@ -12,6 +13,7 @@ export default function SpaceConfiguration() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingSpace, setEditingSpace] = useState<Space | null>(null);
+  const [configuringMappingSpace, setConfiguringMappingSpace] = useState<Space | null>(null);
 
   useEffect(() => {
     loadSpaces();
@@ -325,6 +327,22 @@ export default function SpaceConfiguration() {
                           />
                         </button>
                         <button
+                          onClick={() => setConfiguringMappingSpace(space)}
+                          className="p-2 rounded-lg transition-all"
+                          style={{ color: 'var(--text-muted)' }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
+                            e.currentTarget.style.color = 'var(--primary)';
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.backgroundColor = 'transparent';
+                            e.currentTarget.style.color = 'var(--text-muted)';
+                          }}
+                          title="Configure file mappings"
+                        >
+                          <FolderTree size={16} />
+                        </button>
+                        <button
                           onClick={() => setEditingSpace(space)}
                           className="p-2 rounded-lg transition-all"
                           style={{ color: 'var(--text-muted)' }}
@@ -381,6 +399,18 @@ export default function SpaceConfiguration() {
           onSuccess={handleSpaceCreated}
           space={editingSpace}
         />
+      )}
+
+      {/* File Mapping Configuration Modal */}
+      {configuringMappingSpace && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="max-w-7xl w-full max-h-[90vh] overflow-hidden">
+            <FileMappingConfiguration
+              space={configuringMappingSpace}
+              onClose={() => setConfiguringMappingSpace(null)}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

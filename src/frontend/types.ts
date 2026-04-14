@@ -116,6 +116,10 @@ export interface Space {
   git_repository_name: string | null;
   git_default_branch: string;
 
+  // File Mapping Configuration
+  filters: string[];
+  default_display_name_source: string;
+
   // Metadata
   page_count: number;
   created_at: string;
