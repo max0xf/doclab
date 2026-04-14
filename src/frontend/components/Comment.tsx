@@ -5,9 +5,9 @@ import type { CommentEnrichment } from '../services/enrichmentApi';
 interface CommentProps {
   comment: CommentEnrichment;
   replies: CommentEnrichment[];
-  onDelete: (commentId: number) => void;
-  onResolve: (commentId: number, isResolved: boolean) => void;
-  onReply: (parentId: number, text: string) => void;
+  onDelete: (commentId: string) => void;
+  onResolve: (commentId: string, isResolved: boolean) => void;
+  onReply: (parentId: string, text: string) => void;
   isSubmitting: boolean;
   depth?: number;
 }

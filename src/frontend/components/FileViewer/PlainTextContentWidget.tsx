@@ -9,6 +9,7 @@ import { ContentWidgetProps, VirtualLine, Enrichment } from './types';
  * Implements VirtualContent approach - original content enriched by enrichments.
  */
 // Helper function to count comments recursively including replies
+// Enrichment API now returns nested structure with replies field
 function countCommentsRecursively(comments: any[]): number {
   return comments.reduce((total, comment) => {
     const repliesCount = comment.replies ? countCommentsRecursively(comment.replies) : 0;
@@ -278,10 +279,12 @@ export function PlainTextContentWidget({
 
               {/* Line Content */}
               <div className="flex-1 px-3 py-1 whitespace-pre-wrap break-all relative">
+                {vLine.content || ' '}
+
                 {/* Comment Badge */}
                 {hasComments && (
                   <div
-                    className="absolute -right-2 -top-1 px-1.5 py-0.5 text-xs font-medium rounded-full"
+                    className="absolute right-2 top-0 px-1.5 py-0.5 text-xs font-medium rounded-full z-10"
                     style={{
                       backgroundColor: '#0066cc',
                       color: '#ffffff',
@@ -294,8 +297,8 @@ export function PlainTextContentWidget({
                   </div>
                 )}
 
-                {/* PR Diff Badge */}
-                {vLine.prNumber && (
+                {/* PR Diff Badge - show only on first line of each diff group (hunk) */}
+                {vLine.prNumber && vLine.isFirstInDiffGroup && (
                   <div
                     className="absolute right-2 top-1 flex items-center gap-2 px-2 py-0.5 rounded text-xs font-semibold"
                     style={{

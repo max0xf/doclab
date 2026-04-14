@@ -11,7 +11,7 @@ export interface Enrichment {
 
 export interface CommentEnrichment extends Enrichment {
   type: 'comment';
-  id: number;
+  id: string; // UUID
   source_uri: string;
   line_start: number;
   line_end: number;

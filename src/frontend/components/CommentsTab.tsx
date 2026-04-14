@@ -117,7 +117,7 @@ export function CommentsTab({
     }
   };
 
-  const handleSubmitReply = async (parentId: number, text: string) => {
+  const handleSubmitReply = async (parentId: string, text: string) => {
     if (!text.trim()) {
       return;
     }
@@ -142,7 +142,7 @@ export function CommentsTab({
     }
   };
 
-  const handleDeleteComment = async (commentId: number) => {
+  const handleDeleteComment = async (commentId: string) => {
     if (!window.confirm('Delete this comment?')) {
       return;
     }
@@ -158,7 +158,7 @@ export function CommentsTab({
     }
   };
 
-  const handleResolveComment = async (commentId: number, isResolved: boolean) => {
+  const handleResolveComment = async (commentId: string, isResolved: boolean) => {
     try {
       const action = isResolved ? 'unresolve' : 'resolve';
       await apiClient.request(`/api/wiki/v1/comments/${commentId}/${action}/`, {
