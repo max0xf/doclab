@@ -17,15 +17,15 @@ export default function Profile() {
   const [createdToken, setCreatedToken] = useState<string | null>(null);
   const [isCreatingToken, setIsCreatingToken] = useState(false);
 
-  // Debug settings
-  const [debugModeEnabled, setDebugModeEnabled] = useState(false);
-  const [cacheWritesEnabled, setCacheWritesEnabled] = useState(true);
-  const [_cacheTtlHours, setCacheTtlHours] = useState(24);
+  // Cache settings
+  const [cacheEnabled, setCacheEnabled] = useState(false);
+  const [cacheTtlMinutes, setCacheTtlMinutes] = useState(5);
+  const [customTtl, setCustomTtl] = useState('');
   const [cacheStats, setCacheStats] = useState<any>(null);
 
   useEffect(() => {
     loadApiTokens();
-    loadDebugSettings();
+    loadCacheSettings();
   }, []);
 
   const loadApiTokens = async () => {
@@ -91,20 +91,19 @@ export default function Profile() {
     setTimeout(() => setSuccess(null), 2000);
   };
 
-  const loadDebugSettings = async () => {
+  const loadCacheSettings = async () => {
     try {
-      const data = await apiClient.request<any>('/api/debug/settings/');
-      setDebugModeEnabled(data.debug_mode_enabled);
-      setCacheWritesEnabled(data.cache_writes_enabled);
-      setCacheTtlHours(data.cache_ttl_hours);
+      const data = await apiClient.request<any>('/api/user_management/v1/settings/cache/');
+      setCacheEnabled(data.cache_enabled || false);
+      setCacheTtlMinutes(data.cache_ttl_minutes || 5);
 
-      // Load cache stats if debug mode is enabled
-      if (data.debug_mode_enabled) {
-        const stats = await apiClient.request<any>('/api/debug/stats/');
+      // Load cache stats if cache is enabled
+      if (data.cache_enabled) {
+        const stats = await apiClient.request<any>('/api/user_management/v1/settings/cache/stats/');
         setCacheStats(stats);
       }
-    } catch {
-      // Debug settings not available, ignore
+    } catch (err: any) {
+      console.error('Failed to load cache settings:', err);
     }
   };
 
@@ -272,30 +271,30 @@ export default function Profile() {
         )}
       </div>
 
-      {/* Debug Settings */}
+      {/* Settings */}
       <div className="card">
-        <h2 className="text-lg font-semibold mb-4">Debug Settings</h2>
+        <h2 className="text-lg font-semibold mb-4">Settings</h2>
         <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>
-          Enable debug mode to cache API responses for faster frontend development. Responses are
-          stored in the database and reused for subsequent requests.
+          Configure API response caching for faster development. Cached responses are stored in the
+          database and reused for subsequent requests.
         </p>
 
         <div className="space-y-4">
-          {/* Debug Mode Toggle */}
+          {/* Cache API Responses Toggle */}
           <div className="flex items-center justify-between p-3 border rounded-lg">
             <div>
-              <label className="block text-sm font-medium">Debug Mode</label>
+              <label className="block text-sm font-medium">Cache API responses</label>
               <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
-                Cache API responses to work offline
+                Store API responses for faster development
               </p>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
               <input
                 type="checkbox"
-                checked={debugModeEnabled}
+                checked={cacheEnabled}
                 onChange={async e => {
                   const enabled = e.target.checked;
-                  setDebugModeEnabled(enabled);
+                  setCacheEnabled(enabled);
 
                   // Sync with localStorage for debug widget visibility
                   if (enabled) {
@@ -305,17 +304,17 @@ export default function Profile() {
                   }
 
                   try {
-                    await apiClient.request('/api/debug/settings/', {
+                    await apiClient.request('/api/user_management/v1/settings/cache/', {
                       method: 'PUT',
-                      body: JSON.stringify({ debug_mode_enabled: enabled }),
+                      body: JSON.stringify({ cache_enabled: enabled }),
                     });
-                    setSuccess('Debug mode ' + (enabled ? 'enabled' : 'disabled'));
+                    setSuccess('API caching ' + (enabled ? 'enabled' : 'disabled'));
                     if (enabled) {
-                      loadDebugSettings();
+                      loadCacheSettings();
                     }
                   } catch {
-                    setError('Failed to update debug mode');
-                    setDebugModeEnabled(!enabled);
+                    setError('Failed to update cache settings');
+                    setCacheEnabled(!enabled);
                   }
                 }}
                 className="sr-only peer"
@@ -324,37 +323,110 @@ export default function Profile() {
             </label>
           </div>
 
-          {debugModeEnabled && (
+          {cacheEnabled && (
             <>
-              {/* Cache Writes Toggle */}
-              <div className="flex items-center justify-between p-3 border rounded-lg">
-                <div>
-                  <label className="block text-sm font-medium">Cache Writes</label>
-                  <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
-                    Allow saving new cache entries
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={cacheWritesEnabled}
-                    onChange={async e => {
-                      const enabled = e.target.checked;
-                      setCacheWritesEnabled(enabled);
-                      try {
-                        await apiClient.request('/api/debug/settings/', {
-                          method: 'PUT',
-                          body: JSON.stringify({ cache_writes_enabled: enabled }),
-                        });
-                      } catch {
-                        setError('Failed to update cache writes');
-                        setCacheWritesEnabled(!enabled);
+              {/* Cache TTL Configuration */}
+              <div className="p-3 border rounded-lg">
+                <label className="block text-sm font-medium mb-2">Cache TTL (Time To Live)</label>
+                <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>
+                  How long cached responses remain valid (0 = never expire)
+                </p>
+                <div className="space-y-2">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      checked={cacheTtlMinutes === 5}
+                      onChange={async () => {
+                        setCacheTtlMinutes(5);
+                        try {
+                          await apiClient.request('/api/user_management/v1/settings/cache/', {
+                            method: 'PUT',
+                            body: JSON.stringify({ cache_ttl_minutes: 5 }),
+                          });
+                          setSuccess('Cache TTL updated to 5 minutes');
+                        } catch {
+                          setError('Failed to update cache TTL');
+                        }
+                      }}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">5 minutes (default)</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      checked={cacheTtlMinutes === 60}
+                      onChange={async () => {
+                        setCacheTtlMinutes(60);
+                        try {
+                          await apiClient.request('/api/user_management/v1/settings/cache/', {
+                            method: 'PUT',
+                            body: JSON.stringify({ cache_ttl_minutes: 60 }),
+                          });
+                          setSuccess('Cache TTL updated to 1 hour');
+                        } catch {
+                          setError('Failed to update cache TTL');
+                        }
+                      }}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">1 hour</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      checked={cacheTtlMinutes === 0}
+                      onChange={async () => {
+                        setCacheTtlMinutes(0);
+                        try {
+                          await apiClient.request('/api/user_management/v1/settings/cache/', {
+                            method: 'PUT',
+                            body: JSON.stringify({ cache_ttl_minutes: 0 }),
+                          });
+                          setSuccess('Cache set to never expire');
+                        } catch {
+                          setError('Failed to update cache TTL');
+                        }
+                      }}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">Never expire</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      checked={
+                        cacheTtlMinutes !== 5 && cacheTtlMinutes !== 60 && cacheTtlMinutes !== 0
                       }
-                    }}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
+                      onChange={() => {}}
+                      className="mr-2"
+                    />
+                    <span className="text-sm mr-2">Custom:</span>
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="minutes"
+                      value={customTtl}
+                      onChange={e => setCustomTtl(e.target.value)}
+                      onBlur={async () => {
+                        const minutes = parseInt(customTtl);
+                        if (minutes > 0) {
+                          setCacheTtlMinutes(minutes);
+                          try {
+                            await apiClient.request('/api/user_management/v1/settings/cache/', {
+                              method: 'PUT',
+                              body: JSON.stringify({ cache_ttl_minutes: minutes }),
+                            });
+                            setSuccess(`Cache TTL updated to ${minutes} minutes`);
+                          } catch {
+                            setError('Failed to update cache TTL');
+                          }
+                        }
+                      }}
+                      className="w-20 px-2 py-1 border rounded text-sm"
+                    />
+                  </label>
+                </div>
               </div>
 
               {/* Cache Stats */}
@@ -374,9 +446,11 @@ export default function Profile() {
                   <button
                     onClick={async () => {
                       try {
-                        await apiClient.request('/api/debug/clear/', { method: 'DELETE' });
+                        await apiClient.request('/api/user_management/v1/settings/cache/', {
+                          method: 'DELETE',
+                        });
                         setSuccess('Cache cleared');
-                        loadDebugSettings();
+                        loadCacheSettings();
                       } catch {
                         setError('Failed to clear cache');
                       }
