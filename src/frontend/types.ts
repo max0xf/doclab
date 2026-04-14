@@ -4,7 +4,6 @@
 
 export enum Urls {
   Dashboard = 'dashboard',
-  Repositories = 'repositories',
   Spaces = 'spaces',
   SpaceConfiguration = 'space-configuration',
   DocumentEditor = 'doc',

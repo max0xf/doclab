@@ -139,62 +139,9 @@ export function CommentsTab({
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* New Comment Form */}
-      {selectedLines && (
-        <div
-          className="p-4 border-b"
-          style={{
-            backgroundColor: 'var(--bg-secondary)',
-            borderColor: 'var(--border-color)',
-          }}
-        >
-          <div className="text-xs font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
-            Add comment to{' '}
-            {formatLineRange({
-              lineStart: selectedLines.start,
-              lineEnd: selectedLines.end,
-            } as CommentThread)}
-          </div>
-          <textarea
-            value={newCommentText}
-            onChange={e => setNewCommentText(e.target.value)}
-            onKeyDown={e => {
-              if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                e.preventDefault();
-                handleSubmitComment();
-              }
-            }}
-            placeholder="Enter your comment... (Ctrl+Enter to submit)"
-            className="w-full px-3 py-2 text-sm border rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-            style={{
-              borderColor: 'var(--border-color)',
-              backgroundColor: 'var(--bg-primary)',
-              color: 'var(--text-primary)',
-            }}
-            rows={3}
-            autoFocus
-          />
-          <div className="flex justify-end gap-2 mt-2">
-            <button
-              type="button"
-              onClick={handleSubmitComment}
-              disabled={!newCommentText.trim() || isSubmitting}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm rounded hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{
-                backgroundColor: '#0066cc',
-                color: 'white',
-              }}
-            >
-              <Send size={14} />
-              {isSubmitting ? 'Posting...' : 'Post Comment'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Comment Threads */}
-      <div className="flex-1 overflow-auto p-4">
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Comment Threads - Scrollable */}
+      <div className="flex-1 overflow-auto px-4 py-3">
         {threads.length === 0 ? (
           <div className="text-center py-8" style={{ color: 'var(--text-secondary)' }}>
             <div className="text-sm">No comments yet</div>
@@ -321,6 +268,60 @@ export function CommentsTab({
           </div>
         )}
       </div>
+
+      {/* New Comment Form - Fixed at Bottom */}
+      {selectedLines && (
+        <div
+          className="flex-shrink-0 flex-grow-0 px-4 py-3 border-t"
+          style={{
+            backgroundColor: 'var(--bg-secondary)',
+            borderColor: 'var(--border-color)',
+          }}
+        >
+          <div className="text-xs font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
+            Add comment to{' '}
+            {formatLineRange({
+              lineStart: selectedLines.start,
+              lineEnd: selectedLines.end,
+            } as CommentThread)}
+          </div>
+          <textarea
+            value={newCommentText}
+            onChange={e => setNewCommentText(e.target.value)}
+            onKeyDown={e => {
+              if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                handleSubmitComment();
+              }
+            }}
+            placeholder="Enter your comment... (Ctrl+Enter to submit)"
+            className="w-full px-3 py-2 text-sm border rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+            style={{
+              borderColor: 'var(--border-color)',
+              backgroundColor: 'var(--bg-primary)',
+              color: 'var(--text-primary)',
+              height: '80px',
+              maxHeight: '120px',
+            }}
+            autoFocus
+          />
+          <div className="flex justify-end gap-2 mt-2">
+            <button
+              type="button"
+              onClick={handleSubmitComment}
+              disabled={!newCommentText.trim() || isSubmitting}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm rounded hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                backgroundColor: '#0066cc',
+                color: 'white',
+              }}
+            >
+              <Send size={14} />
+              {isSubmitting ? 'Posting...' : 'Post Comment'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

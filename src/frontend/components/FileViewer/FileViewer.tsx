@@ -14,6 +14,8 @@ interface FileViewerProps {
   enrichments: EnrichmentsResponse;
   onBack: () => void;
   onSave: (newContent: string, description: string) => Promise<void>;
+  onEnrichmentsReload?: () => void;
+  sourceUri: string;
 }
 
 export function FileViewer({
@@ -24,6 +26,8 @@ export function FileViewer({
   enrichments: enrichmentsResponse,
   onBack,
   onSave,
+  onEnrichmentsReload,
+  sourceUri,
 }: FileViewerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('plain');
   const [isEditMode, setIsEditMode] = useState(false);
@@ -37,9 +41,6 @@ export function FileViewer({
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveDescription, setSaveDescription] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-
-  // Build source URI for enrichments
-  const sourceUri = `file://${spaceName}/${filePath}`;
 
   // Convert EnrichmentsResponse to Enrichment[]
   const enrichments: Enrichment[] = [
@@ -57,13 +58,31 @@ export function FileViewer({
       lineEnd: 0,
       data: d,
     })),
-    ...(enrichmentsResponse.pr_diff || []).map((pd, i) => ({
-      id: `pr_diff-${i}`,
-      type: 'pr_diff' as const,
-      lineStart: 0,
-      lineEnd: 0,
-      data: pd,
-    })),
+    // For PR diffs, create enrichments for each hunk's line range
+    ...(enrichmentsResponse.pr_diff || []).flatMap((pd, i) => {
+      if (pd.diff_hunks && pd.diff_hunks.length > 0) {
+        // Create one enrichment per hunk
+        return pd.diff_hunks.map((hunk, j) => ({
+          id: `pr_diff-${i}-hunk-${j}`,
+          type: 'pr_diff' as const,
+          lineStart: hunk.new_start,
+          lineEnd: hunk.new_start + hunk.new_count - 1,
+          data: { ...pd, current_hunk: hunk },
+        }));
+      } else {
+        // No hunks available, mark entire file
+        const totalLines = content.split('\n').length;
+        return [
+          {
+            id: `pr_diff-${i}`,
+            type: 'pr_diff' as const,
+            lineStart: 1,
+            lineEnd: totalLines,
+            data: pd,
+          },
+        ];
+      }
+    }),
     ...(enrichmentsResponse.local_changes || []).map((lc, i) => ({
       id: `local_change-${i}`,
       type: 'local_change' as const,
@@ -77,14 +96,8 @@ export function FileViewer({
   const isMarkdown =
     fileName.toLowerCase().endsWith('.md') || fileName.toLowerCase().endsWith('.markdown');
 
-  // Auto-select view mode based on file type
-  useEffect(() => {
-    if (isMarkdown) {
-      setViewMode('visual');
-    } else {
-      setViewMode('plain');
-    }
-  }, [fileName, isMarkdown]);
+  // Keep plain text as default for all files
+  // Users can manually switch to visual mode if needed
 
   // Sync edited content when content changes
   useEffect(() => {
@@ -143,7 +156,9 @@ export function FileViewer({
 
   const handleCommentsChange = () => {
     // Reload enrichments after comment changes
-    window.location.reload(); // TODO: Implement proper enrichment reload
+    if (onEnrichmentsReload) {
+      onEnrichmentsReload();
+    }
   };
 
   const handleEnrichmentClick = (enrichment: Enrichment) => {
@@ -210,7 +225,7 @@ export function FileViewer({
         {/* Enrichment Panel */}
         {showCommentsPanel && (
           <div
-            className="border-l overflow-hidden"
+            className="h-full border-l overflow-hidden"
             style={{
               width: '500px',
               borderColor: 'var(--border-color)',

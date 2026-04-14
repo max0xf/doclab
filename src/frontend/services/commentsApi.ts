@@ -51,13 +51,13 @@ export const commentsApi = {
     });
 
     const response = await apiClient.request<{ items: FileComment[] }>(
-      `/api/wiki/file-comments/?${queryParams.toString()}`
+      `/api/wiki/v1/comments/?${queryParams.toString()}`
     );
     return response.items || [];
   },
 
   create: async (params: CreateCommentParams): Promise<FileComment> => {
-    const response = await apiClient.request<FileComment>('/api/wiki/file-comments/', {
+    const response = await apiClient.request<FileComment>('/api/wiki/v1/comments/', {
       method: 'POST',
       body: JSON.stringify(params),
     });
@@ -68,7 +68,7 @@ export const commentsApi = {
     commentId: number,
     data: { comment_text?: string; status?: string }
   ): Promise<FileComment> => {
-    const response = await apiClient.request<FileComment>(`/api/wiki/file-comments/${commentId}/`, {
+    const response = await apiClient.request<FileComment>(`/api/wiki/v1/comments/${commentId}/`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -76,7 +76,7 @@ export const commentsApi = {
   },
 
   delete: async (commentId: number): Promise<void> => {
-    await apiClient.request(`/api/wiki/file-comments/${commentId}/`, {
+    await apiClient.request(`/api/wiki/v1/comments/${commentId}/`, {
       method: 'DELETE',
     });
   },

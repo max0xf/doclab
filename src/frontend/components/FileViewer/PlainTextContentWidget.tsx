@@ -104,8 +104,12 @@ export function PlainTextContentWidget({
             >
               {/* Line Number */}
               <div
-                className="flex-shrink-0 w-16 px-3 py-1 text-right select-none border-r"
+                className="flex-shrink-0 py-1 text-right select-none border-r"
                 style={{
+                  minWidth: '36px',
+                  paddingLeft: '2px',
+                  paddingRight: '4px',
+                  fontSize: '11px',
                   color: 'var(--text-secondary)',
                   borderColor: 'var(--border-color)',
                   backgroundColor: 'var(--bg-secondary)',

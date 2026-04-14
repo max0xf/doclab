@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Folder, FileText, Loader2 } from 'lucide-react';
+import { ArrowLeft, Folder, FileText, Loader2, MessageSquare, GitBranch } from 'lucide-react';
 import { enrichmentApi, type EnrichmentsResponse } from '../services/enrichmentApi';
 import type { Space } from '../types';
 import { apiClient } from '../services/apiClient';
@@ -65,6 +65,9 @@ function SpaceContentView({ space, initialPath }: SpaceContentViewProps) {
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
+  const [enrichmentCounts, setEnrichmentCounts] = useState<
+    Record<string, { comments: number; prs: number; diffs: number }>
+  >({});
 
   // Update URL when path changes
   const updatePath = (newPath: string) => {
@@ -217,6 +220,46 @@ function SpaceContentView({ space, initialPath }: SpaceContentViewProps) {
 
           console.log('Transformed items:', items);
           setFiles(items);
+
+          // Fetch enrichment counts for all files in one request using recursive flag
+          try {
+            const directorySourceUri = enrichmentApi.buildSourceUri(
+              space.git_provider || '',
+              space.git_base_url || '',
+              space.git_project_key || '',
+              space.git_repository_id || '',
+              space.git_default_branch || 'main',
+              currentPath
+            );
+
+            console.log(
+              '[Enrichments] Fetching batch enrichments for directory:',
+              directorySourceUri
+            );
+            const allEnrichments = await enrichmentApi.getEnrichments(directorySourceUri, true);
+
+            // Process batch results
+            const counts: Record<string, { comments: number; prs: number; diffs: number }> = {};
+
+            // allEnrichments is Record<string, EnrichmentsResponse> when recursive=true
+            if (typeof allEnrichments === 'object' && !('comments' in allEnrichments)) {
+              Object.entries(allEnrichments).forEach(([sourceUri, enrichmentData]) => {
+                // Extract filename from source URI (last part after /)
+                const fileName = sourceUri.split('/').pop() || '';
+                counts[fileName] = {
+                  comments: enrichmentData.comments?.length || 0,
+                  prs: enrichmentData.pr_diff?.length || 0,
+                  diffs: enrichmentData.diff?.length || 0,
+                };
+              });
+              console.log('[Enrichments] Batch enrichments loaded:', counts);
+            }
+
+            setEnrichmentCounts(counts);
+          } catch (error) {
+            console.error('[Enrichments] Failed to load batch enrichments:', error);
+            setEnrichmentCounts({});
+          }
         }
       } catch (error) {
         console.error('Failed to load content:', error);
@@ -297,12 +340,23 @@ function SpaceContentView({ space, initialPath }: SpaceContentViewProps) {
 
   // If a file is selected, show file viewer
   if (selectedFile) {
+    // Build source URI for enrichments and comments
+    const sourceUri = enrichmentApi.buildSourceUri(
+      space.git_provider || '',
+      space.git_base_url || '',
+      space.git_project_key || '',
+      space.git_repository_id || '',
+      space.git_default_branch || 'main',
+      selectedFile.path
+    );
+
     return (
       <FileContentView
         space={space}
         file={selectedFile}
         fileContent={fileContent}
         isLoading={isLoading}
+        sourceUri={sourceUri}
         onBack={() => {
           setSelectedFile(null);
           const pathParts = currentPath.split('/');
@@ -320,6 +374,7 @@ function SpaceContentView({ space, initialPath }: SpaceContentViewProps) {
       files={files}
       currentPath={currentPath}
       isLoading={isLoading}
+      enrichmentCounts={enrichmentCounts}
       onFileClick={handleFileClick}
       onNavigateUp={handleNavigateUp}
     />
@@ -331,6 +386,7 @@ interface FileBrowserViewProps {
   files: FileItem[];
   currentPath: string;
   isLoading: boolean;
+  enrichmentCounts: Record<string, { comments: number; prs: number; diffs: number }>;
   onFileClick: (file: FileItem) => void;
   onNavigateUp: () => void;
 }
@@ -340,6 +396,7 @@ function FileBrowserView({
   files,
   currentPath,
   isLoading,
+  enrichmentCounts,
   onFileClick,
   onNavigateUp,
 }: FileBrowserViewProps) {
@@ -383,34 +440,78 @@ function FileBrowserView({
           </div>
         ) : (
           <div>
-            {files.map(file => (
-              <button
-                key={file.path}
-                onClick={() => onFileClick(file)}
-                className="w-full flex items-center gap-3 px-6 py-3 border-b hover:bg-opacity-50 transition-colors text-left"
-                style={{
-                  borderColor: 'var(--border-color)',
-                  backgroundColor: 'transparent',
-                }}
-              >
-                {file.type === 'directory' ? (
-                  <Folder size={18} style={{ color: 'var(--primary)' }} />
-                ) : (
-                  <FileText size={18} style={{ color: 'var(--text-secondary)' }} />
-                )}
-                <span
-                  className={file.type === 'directory' ? 'font-medium' : ''}
-                  style={{ color: 'var(--text-primary)' }}
+            {files.map(file => {
+              const enrichments = enrichmentCounts[file.path] || { comments: 0, prs: 0, diffs: 0 };
+              const hasEnrichments =
+                enrichments.comments > 0 || enrichments.prs > 0 || enrichments.diffs > 0;
+
+              return (
+                <button
+                  key={file.path}
+                  onClick={() => onFileClick(file)}
+                  className="w-full grid grid-cols-12 gap-4 px-6 py-3 border-b hover:bg-opacity-50 transition-colors text-left items-center"
+                  style={{
+                    borderColor: 'var(--border-color)',
+                    backgroundColor: hasEnrichments ? 'rgba(227, 242, 253, 0.3)' : 'transparent',
+                  }}
                 >
-                  {file.name}
-                </span>
-                {file.size !== undefined && file.type === 'file' && (
-                  <span className="ml-auto text-xs" style={{ color: 'var(--text-secondary)' }}>
-                    {formatSize(file.size)}
-                  </span>
-                )}
-              </button>
-            ))}
+                  {/* Name Column */}
+                  <div className="col-span-7 flex items-center gap-3">
+                    {file.type === 'directory' ? (
+                      <Folder size={18} style={{ color: 'var(--primary)' }} />
+                    ) : (
+                      <FileText size={18} style={{ color: 'var(--text-secondary)' }} />
+                    )}
+                    <span
+                      className={file.type === 'directory' ? 'font-medium' : ''}
+                      style={{ color: 'var(--text-primary)' }}
+                    >
+                      {file.name}
+                    </span>
+                  </div>
+
+                  {/* Comments Column */}
+                  <div className="col-span-2 flex items-center justify-center">
+                    {file.type === 'file' && enrichments.comments > 0 && (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs"
+                        style={{
+                          backgroundColor: '#e3f2fd',
+                          color: '#1976d2',
+                        }}
+                      >
+                        <MessageSquare size={12} />
+                        {enrichments.comments}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* PRs Column */}
+                  <div className="col-span-2 flex items-center justify-center gap-1 flex-wrap">
+                    {file.type === 'file' && enrichments.prs > 0 && (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium"
+                        style={{
+                          backgroundColor: '#6f42c1',
+                          color: 'white',
+                        }}
+                      >
+                        <GitBranch size={12} />
+                        {enrichments.prs}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Size Column */}
+                  <div
+                    className="col-span-1 text-right text-xs"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
+                    {file.type === 'file' && file.size !== undefined ? formatSize(file.size) : '-'}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -424,37 +525,39 @@ interface FileContentViewProps {
   fileContent: string;
   isLoading: boolean;
   onBack: () => void;
+  sourceUri: string;
 }
 
-function FileContentView({ space, file, fileContent, isLoading, onBack }: FileContentViewProps) {
+function FileContentView({
+  space,
+  file,
+  fileContent,
+  isLoading,
+  onBack,
+  sourceUri,
+}: FileContentViewProps) {
   const [enrichments, setEnrichments] = useState<EnrichmentsResponse>({});
+
+  // Load enrichments function
+  const loadEnrichments = async () => {
+    if (!file) {
+      return;
+    }
+
+    try {
+      const response = await enrichmentApi.getEnrichments(sourceUri);
+      console.log('[FileContentView] Loaded enrichments:', response);
+      setEnrichments(response || {});
+    } catch (error) {
+      console.error('[FileContentView] Failed to load enrichments:', error);
+      setEnrichments({});
+    }
+  };
 
   // Load enrichments when file changes
   useEffect(() => {
-    const loadEnrichments = async () => {
-      if (!file) {
-        return;
-      }
-
-      try {
-        const sourceUri = enrichmentApi.buildSourceUri(
-          space.git_provider || '',
-          space.git_base_url || '',
-          space.git_project_key || '',
-          space.git_repository_id || '',
-          space.git_default_branch || 'main',
-          file.path
-        );
-        const response = await enrichmentApi.getEnrichments(sourceUri);
-        console.log('[FileContentView] Loaded enrichments:', response);
-        setEnrichments(response || {});
-      } catch (error) {
-        console.error('[FileContentView] Failed to load enrichments:', error);
-        setEnrichments({});
-      }
-    };
-
     loadEnrichments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file, space]);
 
   const handleSave = async (newContent: string, description: string) => {
@@ -494,6 +597,8 @@ function FileContentView({ space, file, fileContent, isLoading, onBack }: FileCo
       enrichments={enrichments}
       onBack={onBack}
       onSave={handleSave}
+      onEnrichmentsReload={loadEnrichments}
+      sourceUri={sourceUri}
     />
   );
 }

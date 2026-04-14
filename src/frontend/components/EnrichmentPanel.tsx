@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, MessageSquare, FileEdit, GitBranch, AlertCircle, Copy, Check } from 'lucide-react';
 import DiffViewer from './DiffViewer';
 import { CommentsTab } from './CommentsTab';
+import { PRBanner } from './FileViewer/PRBanner';
 import type { EnrichmentsResponse } from '../services/enrichmentApi';
 
 interface EnrichmentPanelProps {
@@ -217,58 +218,53 @@ export default function EnrichmentPanel({
             {/* PRs */}
             {activeTab === 'prs' && enrichments.pr_diff && enrichments.pr_diff.length > 0 && (
               <div className="space-y-3 mb-6">
-                <h4 className="font-medium text-sm" style={{ color: 'var(--text-secondary)' }}>
+                <h4 className="font-medium text-sm mb-3" style={{ color: 'var(--text-secondary)' }}>
                   Pull Requests ({enrichments.pr_diff.length})
                 </h4>
                 {enrichments.pr_diff.map(pr => (
-                  <div
+                  <PRBanner
                     key={pr.pr_number}
-                    className="p-3 rounded border"
-                    style={{
-                      borderColor: 'var(--border-color)',
-                      backgroundColor: 'var(--bg-secondary)',
-                    }}
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <GitBranch size={14} style={{ color: '#9c27b0' }} />
-                        <span
-                          className="text-sm font-medium"
-                          style={{ color: 'var(--text-primary)' }}
-                        >
-                          PR #{pr.pr_number}
-                        </span>
-                        <span
-                          className="text-xs px-1.5 py-0.5 rounded"
-                          style={{
-                            backgroundColor: '#f3e5f5',
-                            color: '#7b1fa2',
-                          }}
-                        >
-                          {pr.pr_state}
-                        </span>
-                      </div>
-                    </div>
-                    <p className="text-sm mb-2" style={{ color: 'var(--text-primary)' }}>
-                      {pr.pr_title}
-                    </p>
-                    <div
-                      className="flex items-center justify-between text-xs"
-                      style={{ color: 'var(--text-secondary)' }}
-                    >
-                      <span>by {pr.pr_author}</span>
-                      <a
-                        href={pr.pr_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="hover:underline"
-                        style={{ color: '#0066cc' }}
-                      >
-                        View PR →
-                      </a>
-                    </div>
-                  </div>
+                    prNumber={pr.pr_number}
+                    prTitle={pr.pr_title}
+                    prAuthor={pr.pr_author}
+                    prState={pr.pr_state}
+                    prUrl={pr.pr_url}
+                  />
                 ))}
+              </div>
+            )}
+
+            {/* Empty state for PRs */}
+            {activeTab === 'prs' && (!enrichments.pr_diff || enrichments.pr_diff.length === 0) && (
+              <div className="text-center py-8" style={{ color: 'var(--text-secondary)' }}>
+                <GitBranch size={32} className="mx-auto mb-2 opacity-50" />
+                <div className="text-sm">No pull request changes for this file</div>
+              </div>
+            )}
+
+            {/* Diffs - keep existing code */}
+            {activeTab === 'diffs' && enrichments.diff && enrichments.diff.length > 0 && (
+              <div className="space-y-4 mb-6">
+                <h4 className="font-medium text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  Pending Changes ({enrichments.diff.length})
+                </h4>
+                {enrichments.diff.map(diff => (
+                  <DiffViewer
+                    key={diff.id}
+                    diff={diff}
+                    fileName={fileName}
+                    onAccept={onAcceptDiff}
+                    onReject={onRejectDiff}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Empty state for Diffs */}
+            {activeTab === 'diffs' && (!enrichments.diff || enrichments.diff.length === 0) && (
+              <div className="text-center py-8" style={{ color: 'var(--text-secondary)' }}>
+                <FileEdit size={32} className="mx-auto mb-2 opacity-50" />
+                <div className="text-sm">No pending changes for this file</div>
               </div>
             )}
 
@@ -289,42 +285,35 @@ export default function EnrichmentPanel({
                         backgroundColor: 'var(--bg-secondary)',
                       }}
                     >
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <AlertCircle size={14} style={{ color: '#ff5722' }} />
-                          <span
-                            className="text-sm font-medium"
-                            style={{ color: 'var(--text-primary)' }}
-                          >
-                            {change.file_path}
-                          </span>
-                          <span
-                            className="text-xs px-1.5 py-0.5 rounded"
-                            style={{
-                              backgroundColor: '#fff3e0',
-                              color: '#e65100',
-                            }}
-                          >
-                            {change.status}
-                          </span>
-                        </div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <AlertCircle size={14} style={{ color: '#ff9800' }} />
+                        <span
+                          className="text-sm font-medium"
+                          style={{ color: 'var(--text-primary)' }}
+                        >
+                          {change.commit_message || 'Local change'}
+                        </span>
                       </div>
-                      <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                        {change.commit_message}
-                      </p>
+                      <div
+                        className="flex items-center justify-between text-xs"
+                        style={{ color: 'var(--text-secondary)' }}
+                      >
+                        <span>{change.status}</span>
+                        <span>{new Date(change.created_at).toLocaleString()}</span>
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
 
-            {/* Empty State */}
-            {tabs.find(t => t.id === activeTab)?.count === 0 && (
-              <div className="text-center py-12">
-                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                  No {activeTab} found
-                </p>
-              </div>
-            )}
+            {/* Empty state for Local Changes */}
+            {activeTab === 'local' &&
+              (!enrichments.local_changes || enrichments.local_changes.length === 0) && (
+                <div className="text-center py-8" style={{ color: 'var(--text-secondary)' }}>
+                  <AlertCircle size={32} className="mx-auto mb-2 opacity-50" />
+                  <div className="text-sm">No local changes for this file</div>
+                </div>
+              )}
           </div>
         )}
       </div>

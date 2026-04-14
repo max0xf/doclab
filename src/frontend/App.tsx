@@ -9,7 +9,6 @@ import { Urls } from './types';
 
 // Lazy-loaded views for code splitting
 const Dashboard = React.lazy(() => import('./views/Dashboard'));
-const Repositories = React.lazy(() => import('./views/Repositories'));
 const Spaces = React.lazy(() => import('./views/Spaces'));
 const SpaceConfiguration = React.lazy(() => import('./views/SpaceConfiguration'));
 const DocumentEditor = React.lazy(() => import('./views/DocumentEditor'));
@@ -58,7 +57,6 @@ function AppContent() {
     return (
       <React.Suspense fallback={<ViewLoadingFallback />}>
         {activeView === Urls.Dashboard && <Dashboard navigate={navigate} />}
-        {activeView === Urls.Repositories && <Repositories />}
         {activeView === Urls.Spaces && <Spaces navigate={navigate} />}
         {activeView === Urls.SpaceConfiguration && <SpaceConfiguration />}
         {activeView.startsWith(Urls.DocumentEditor) && <DocumentEditor />}
