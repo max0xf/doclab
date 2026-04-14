@@ -1,85 +1,218 @@
 # DocLab TODO - Remaining Implementation Tasks
 
-## 🔴 HIGH PRIORITY - Core Workflow Completion
+## 🔴 HIGH PRIORITY - PoC Use Cases
 
-### 1. Diff Approval Workflow (2-3 hours)
-**Status:** Partial - UI ready, backend actions stubbed
+### 1. Edit of Rendered File with Commit/PR Creation
+**Status:** Partial - Basic edit exists, not fully tested or supported
 
-**Backend Tasks:**
-- [ ] Add `approve` action to `UserChangeViewSet`
-  - File: `src/backend/src/wiki/views_user_changes.py`
-  - Endpoint: `POST /api/wiki/v1/user-changes/{id}/approve/`
-  - Logic: Set status to 'approved', record reviewer
-  
-- [ ] Add `reject` action to `UserChangeViewSet`
-  - File: `src/backend/src/wiki/views_user_changes.py`
-  - Endpoint: `POST /api/wiki/v1/user-changes/{id}/reject/`
-  - Logic: Set status to 'rejected', record reviewer
+**Completed:**
+- [x] VirtualContent architecture foundation
+- [x] User changes tracking (pending changes stored)
+- [x] Diff generation for changes
 
-- [ ] Implement Git commit logic in `commit_approved_changes()`
+**Remaining:**
+- [ ] Edit mode completion
+  - Plain text editing works but not tested thoroughly
+  - Visual/rendered mode editing not supported
+  - Need: Edit mode for all file types (Markdown, YAML, XML, etc.)
+  - Need: Visual editor for Markdown (WYSIWYG)
+  - Need: Comprehensive testing of edit functionality
+- [ ] Edit mode toggle UI
+  - Add Edit/Preview toggle button
+  - Handle unsaved changes warnings
+  - Auto-save or save prompt
+- [ ] Git commit creation from approved changes
   - File: `src/backend/src/wiki/views_user_changes.py:104`
-  - Current: Just marks as 'committed' without Git push
-  - Needed: Actually commit to Git repository
-  - Use: GitPython or provider's `create_commit()` method
-
-**Frontend Tasks:**
-- [ ] Connect `onAcceptDiff` to approve API
-  - File: `src/frontend/components/MainView.tsx:582-586`
-  - Replace TODO with actual API call
-  
-- [ ] Connect `onRejectDiff` to reject API
-  - File: `src/frontend/components/MainView.tsx:587-591`
-  - Replace TODO with actual API call
-
-- [ ] Add error handling and success notifications
-- [ ] Reload enrichments after approve/reject
-
-**Testing:**
-- [ ] Integration test for approve workflow
-- [ ] Integration test for reject workflow
-- [ ] Test Git commit creation
+  - Need: Implement actual Git commit via provider
+- [ ] PR creation workflow
+  - Backend: Add `create_pr` action to UserChangeViewSet
+  - Frontend: Add "Create PR" button in diff view
+  - Integration: Call git provider's PR creation API
+- [ ] Approve/reject workflow completion
+  - Backend: Implement approve/reject actions
+  - Frontend: Connect approve/reject buttons to API
 
 ---
 
-## 🟡 MEDIUM PRIORITY - Git Operations
+### 2. Embedded Comments and Diffs from Active PRs
+**Status:** Complete ✅
 
-### 2. Git Commit Creation (4-6 hours)
-**Status:** Not Implemented
+**Completed:**
+- [x] PR diff enrichment provider
+- [x] Inline PR diff rendering with virtual content
+- [x] PR badges on changed lines
+- [x] Multiple PR support with filtering
+- [x] Diff hunks with additions/deletions visualization
+- [x] PR metadata display (number, title, author, state)
 
-**GitHub Provider:**
-- [ ] Implement `create_commit()` in `GitHubProvider`
-  - File: `src/backend/src/git_provider/providers/github.py:165`
-  - Use: GitHub Git Data API
-  - Steps:
-    1. Get current tree SHA
-    2. Create blobs for changed files
-    3. Create new tree
-    4. Create commit
-    5. Update branch reference
+---
 
-**Bitbucket Server Provider:**
-- [ ] Implement `create_commit()` in `BitbucketServerProvider`
+### 3. Inline Comments (Line-Specific)
+**Status:** Complete ✅
+
+**Completed:**
+- [x] Line-specific comment creation
+- [x] Comment anchoring to lines
+- [x] Comment badges with count
+- [x] Threaded replies (unlimited depth)
+- [x] Nested reply structure in API
+- [x] Recursive rendering of replies
+- [x] Delete/update/resolve operations on all comments
+- [x] Comment panel with line grouping
+- [x] Auto-expand selected line comments
+
+---
+
+### 4. Page/Document Comments
+**Status:** Complete ✅
+
+**Completed:**
+- [x] Document-level comments (no line anchoring)
+- [x] Collapsible document comments section
+- [x] Threaded replies on document comments
+- [x] Same CRUD operations as line comments
+- [x] Separate UI section for document vs line comments
+
+---
+
+### 5. Custom Hierarchy for Repo with Human Readable Names
+**Status:** Partial - Space organization done, file mapping missing
+
+**Completed:**
+- [x] Space-based organization
+- [x] Custom space names and descriptions
+- [x] Space slug for URL-friendly names
+- [x] Space permissions and ownership
+- [x] Favorites and recent spaces
+- [x] Space shortcuts for quick navigation
+- [x] Hierarchical navigation in left menu
+
+**Remaining:**
+- [ ] File path to human-readable name mapping
+  - Backend: Add FileMapping model (file_path → display_name, description)
+  - API: CRUD endpoints for file mappings
+  - UI: Show mapped names instead of raw file paths
+  - Example: `docs/api/rest.md` → "REST API Documentation"
+- [ ] Directory/folder custom names
+  - Map entire directories to readable names
+  - Example: `src/backend/` → "Backend Services"
+- [ ] Breadcrumb navigation with custom names
+  - Show mapped names in breadcrumbs
+  - Fallback to file path if no mapping exists
+- [ ] File mapping management UI
+  - Bulk import from CSV/JSON
+  - Inline editing in file browser
+  - Search and filter mappings
+
+---
+
+### 6. Preview/Edit for Markdown, Drawio, and Mermaid
+**Status:** Minimal - Only plain text view, no visual editing or enrichments
+
+**Markdown:**
+- [x] Basic markdown rendering (react-markdown)
+- [ ] Enrichments in rendered markdown view
+  - Comments and diffs don't show in rendered markdown
+  - Only work in plain text view
+- [ ] Visual/WYSIWYG editor for markdown
+  - Currently only plain text editing
+  - Need: Rich text editor (e.g., TipTap, ProseMirror)
+- [ ] Live preview mode
+  - Edit and preview side-by-side
+- [ ] Advanced markdown features
+  - [ ] Task lists (checkboxes)
+  - [ ] Footnotes
+  - [ ] Definition lists
+  - [x] Code block syntax highlighting
+  - [x] Tables
+  - [x] Links
+
+**Drawio:**
+- [ ] Drawio file detection (.drawio, .drawio.xml)
+- [ ] Plain text edit mode for .drawio XML
+- [ ] Syntax highlighting for XML
+- [ ] Visual preview of diagrams
+  - Render drawio diagrams in view mode
+- [ ] Future: Visual editor integration (drawio embed)
+
+**Mermaid:**
+- [ ] Mermaid diagram detection in markdown (```mermaid blocks)
+- [ ] Mermaid rendering in preview
+  - Use mermaid.js library
+- [ ] Plain text edit for mermaid blocks
+- [ ] Live diagram preview while editing
+- [ ] Support for all mermaid diagram types
+  - Flowcharts, sequence diagrams, class diagrams, etc.
+
+**Code Files (YAML, XML, JSON, etc.):**
+- [x] Syntax highlighting for common formats
+- [x] Plain text viewing
+- [x] Line numbers
+- [ ] Code folding support (not implemented)
+- [ ] Plain text editing (exists but not tested)
+- [ ] Schema validation (YAML, JSON)
+- [ ] Auto-formatting
+
+---
+
+### 7. Integration with Jira
+**Status:** Not Started
+
+**Requirements:**
+- [ ] Jira issue link detection in markdown
+- [ ] Jira API integration
+  - Backend: Add Jira provider
+  - Config: Jira URL, credentials, project keys
+- [ ] Issue status display
+  - Fetch issue metadata (status, assignee, priority)
+  - Render as rich links with status badges
+- [ ] Confluence-like rendering
+  - Issue key → clickable link with tooltip
+  - Status indicator (To Do, In Progress, Done)
+  - Assignee avatar/name
+- [ ] Caching of Jira data
+  - Cache issue metadata to reduce API calls
+  - Refresh on demand or periodic sync
+
+---
+
+### 8. Commits/PR - Bitbucket Integration
+**Status:** Partial - Read operations complete, write operations pending
+
+**Bitbucket Server (Completed):**
+- [x] Repository listing
+- [x] Branch listing
+- [x] File content retrieval
+- [x] Directory listing
+- [x] PR diff fetching
+- [x] Authentication with tokens
+
+**Bitbucket Server (Remaining):**
+- [ ] Commit creation
+  - Implement `create_commit()` in BitbucketServerProvider
   - File: `src/backend/src/git_provider/providers/bitbucket_server.py:285`
-  - Use: Bitbucket REST API
-  - Alternative: Use GitPython for local operations
+- [ ] PR creation
+  - Add `create_pull_request()` method
+  - Support title, description, source/target branches
+- [ ] PR update/merge operations
+- [ ] Commit history retrieval
 
-**Local Git Provider:**
-- [ ] Enhance `create_commit()` in `LocalGitProvider`
-  - File: `src/backend/src/git_provider/providers/local_git.py`
-  - Already has basic implementation
-  - May need enhancements for multi-file commits
+**GitHub (Future):**
+- [ ] GitHub provider implementation
+- [ ] OAuth authentication
+- [ ] Repository operations
+- [ ] Commit and PR creation
+- [ ] GitHub Actions integration
 
-**Testing:**
-- [ ] Test commit creation for each provider
-- [ ] Test multi-file commits
-- [ ] Test commit message formatting
-- [ ] Test branch updates
+---
+
+## 🟡 MEDIUM PRIORITY - Enhancements
 
 ---
 
 ## 🟢 LOW PRIORITY - Optional Features
 
-### 3. SSO/OIDC Authentication (6-8 hours)
+### 9. SSO/OIDC Authentication (6-8 hours)
 **Status:** Stub - Returns 501
 
 **Backend Tasks:**
@@ -217,50 +350,3 @@
 - [ ] Type definitions documentation
 - [ ] Configuration examples
 
----
-
-## 🎯 PRIORITY ORDER FOR IMPLEMENTATION
-
-1. **Week 1:** Diff approval workflow (HIGH)
-   - Backend approve/reject endpoints
-   - Frontend integration
-   - Basic tests
-
-2. **Week 2:** Git commit creation (MEDIUM)
-   - GitHub provider implementation
-   - Bitbucket provider implementation
-   - Comprehensive tests
-
-3. **Week 3:** Testing & Polish
-   - Integration test coverage
-   - Bug fixes
-   - Performance optimization
-
-4. **Week 4+:** Optional features (LOW)
-   - SSO if needed
-   - Advanced features based on user feedback
-
----
-
-## 📊 COMPLETION METRICS
-
-**Current Status:**
-- Core Features: 90% complete
-- Backend Tests: 100% (37/37 passing)
-- Frontend Tests: 0% (not started)
-- Documentation: 20% complete
-
-**Target for v1.0:**
-- Core Features: 100%
-- Backend Tests: 100%
-- Frontend Tests: 80%
-- Documentation: 80%
-
----
-
-## 🔗 RELATED FILES
-
-- Implementation Plan: `/docs/implementation-plan-rendering-editing-enrichments.md`
-- Backend Design: `/specs/docs/specs/backend/DESIGN.md`
-- Test Structure: `/src/backend/src/integration_tests/TEST_STRUCTURE.md`
-- Enrichment Tests: `/src/backend/src/integration_tests/README_ENRICHMENT_TESTS.md`
