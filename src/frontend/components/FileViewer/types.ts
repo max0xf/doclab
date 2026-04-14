@@ -49,4 +49,8 @@ export interface VirtualLine {
   content: string;
   enrichments: Enrichment[];
   isEnrichmentLine?: boolean; // True if this is an inserted enrichment line
+  diffType?: 'addition' | 'deletion'; // Type of diff change
+  prNumber?: number; // PR number for diff lines
+  prTitle?: string; // PR title for diff lines
+  isFirstInDiffGroup?: boolean; // True if this is the first line in a group of additions or deletions
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, MessageSquare, Edit, Save, X } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Edit, Save, X, GitPullRequest } from 'lucide-react';
 import { ViewModeSwitcher } from './ViewModeSwitcher';
 import { ViewMode } from './types';
 
@@ -11,10 +11,13 @@ interface FileViewerHeaderProps {
   isEditMode: boolean;
   commentsCount?: number;
   showCommentsPanel: boolean;
+  prNumbers?: number[];
+  selectedPR?: number | 'all';
   onBack: () => void;
   onViewModeChange: (mode: ViewMode) => void;
   onToggleEdit: () => void;
   onToggleComments: () => void;
+  onPRFilterChange?: (prNumber: number | 'all') => void;
   onSave?: () => void;
   onCancel?: () => void;
   isDirty?: boolean;
@@ -28,10 +31,13 @@ export function FileViewerHeader({
   isEditMode,
   commentsCount,
   showCommentsPanel,
+  prNumbers,
+  selectedPR = 'all',
   onBack,
   onViewModeChange,
   onToggleEdit,
   onToggleComments,
+  onPRFilterChange,
   onSave,
   onCancel,
   isDirty,
@@ -69,6 +75,32 @@ export function FileViewerHeader({
       <div className="flex items-center gap-1.5">
         {/* View Mode Switcher */}
         {!isEditMode && <ViewModeSwitcher currentMode={viewMode} onModeChange={onViewModeChange} />}
+
+        {/* PR Filter Dropdown */}
+        {!isEditMode && prNumbers && prNumbers.length > 1 && onPRFilterChange && (
+          <div className="flex items-center gap-1">
+            <GitPullRequest size={14} style={{ color: 'var(--text-secondary)' }} />
+            <select
+              value={selectedPR}
+              onChange={e =>
+                onPRFilterChange(e.target.value === 'all' ? 'all' : Number(e.target.value))
+              }
+              className="px-2 py-1 text-xs rounded border"
+              style={{
+                backgroundColor: 'var(--bg-tertiary)',
+                color: 'var(--text-primary)',
+                borderColor: 'var(--border-color)',
+              }}
+            >
+              <option value="all">All PRs ({prNumbers.length})</option>
+              {prNumbers.map(prNum => (
+                <option key={prNum} value={prNum}>
+                  PR #{prNum}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Comments Button */}
         <button

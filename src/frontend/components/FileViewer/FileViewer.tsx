@@ -41,6 +41,12 @@ export function FileViewer({
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveDescription, setSaveDescription] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedPR, setSelectedPR] = useState<number | 'all'>('all');
+
+  // Get unique PR numbers from enrichments
+  const prNumbers = enrichmentsResponse.pr_diff
+    ? Array.from(new Set(enrichmentsResponse.pr_diff.map(pr => pr.pr_number))).sort((a, b) => a - b)
+    : [];
 
   // Convert EnrichmentsResponse to Enrichment[]
   const enrichments: Enrichment[] = [
@@ -58,31 +64,70 @@ export function FileViewer({
       lineEnd: 0,
       data: d,
     })),
-    // For PR diffs, create enrichments for each hunk's line range
-    ...(enrichmentsResponse.pr_diff || []).flatMap((pd, i) => {
-      if (pd.diff_hunks && pd.diff_hunks.length > 0) {
-        // Create one enrichment per hunk
-        return pd.diff_hunks.map((hunk, j) => ({
-          id: `pr_diff-${i}-hunk-${j}`,
-          type: 'pr_diff' as const,
-          lineStart: hunk.new_start,
-          lineEnd: hunk.new_start + hunk.new_count - 1,
-          data: { ...pd, current_hunk: hunk },
-        }));
-      } else {
-        // No hunks available, mark entire file
-        const totalLines = content.split('\n').length;
-        return [
-          {
-            id: `pr_diff-${i}`,
-            type: 'pr_diff' as const,
-            lineStart: 1,
-            lineEnd: totalLines,
-            data: pd,
-          },
-        ];
-      }
-    }),
+    // For PR diffs, create enrichments for specific changed lines only
+    // Filter by selected PR, then sort by PR number (ascending) to process older PRs first
+    ...(enrichmentsResponse.pr_diff || [])
+      .filter(pd => selectedPR === 'all' || pd.pr_number === selectedPR)
+      .sort((a, b) => a.pr_number - b.pr_number)
+      .flatMap((pd, i) => {
+        if (pd.diff_hunks && pd.diff_hunks.length > 0) {
+          // For each hunk, create enrichments based on original file line numbers (old_start)
+          return pd.diff_hunks.flatMap((hunk, j) => {
+            // Find the range of original lines affected by this hunk
+            let currentOldLine = hunk.old_start;
+            const affectedLines = new Set<number>();
+
+            console.log(`[FileViewer] Processing PR #${pd.pr_number} hunk ${j}:`, {
+              old_start: hunk.old_start,
+              old_count: hunk.old_count,
+              new_start: hunk.new_start,
+              new_count: hunk.new_count,
+              lines_count: hunk.lines.length,
+            });
+
+            // Walk through hunk to find which original lines are affected
+            for (const line of hunk.lines) {
+              const prefix = line[0];
+
+              if (prefix === ' ') {
+                // Context line - exists in original file
+                affectedLines.add(currentOldLine);
+                console.log(`[FileViewer]   CONTEXT at old line ${currentOldLine}`);
+                currentOldLine++;
+              } else if (prefix === '-') {
+                // Deletion - exists in original file
+                affectedLines.add(currentOldLine);
+                console.log(`[FileViewer]   DELETION at old line ${currentOldLine}`);
+                currentOldLine++;
+              } else if (prefix === '+') {
+                // Addition - doesn't exist in original, but mark the previous line
+                // so PlainTextContentWidget knows to insert additions after it
+                if (currentOldLine > hunk.old_start) {
+                  affectedLines.add(currentOldLine - 1);
+                } else {
+                  affectedLines.add(currentOldLine);
+                }
+                console.log(`[FileViewer]   ADDITION (marking old line ${currentOldLine})`);
+              }
+            }
+
+            const affectedLinesArray = Array.from(affectedLines).sort((a, b) => a - b);
+            console.log(`[FileViewer] Created enrichments for old lines:`, affectedLinesArray);
+
+            // Create enrichments for each affected original line
+            return affectedLinesArray.map(lineNum => ({
+              id: `pr_diff-${i}-hunk-${j}-line-${lineNum}`,
+              type: 'pr_diff' as const,
+              lineStart: lineNum,
+              lineEnd: lineNum,
+              data: { ...pd, current_hunk: hunk },
+            }));
+          });
+        } else {
+          // No hunks available - don't create enrichments
+          return [];
+        }
+      }),
     ...(enrichmentsResponse.local_changes || []).map((lc, i) => ({
       id: `local_change-${i}`,
       type: 'local_change' as const,
@@ -203,6 +248,8 @@ export function FileViewer({
         isEditMode={isEditMode}
         commentsCount={enrichmentsResponse.comments?.length}
         showCommentsPanel={showCommentsPanel}
+        prNumbers={prNumbers}
+        selectedPR={selectedPR}
         onBack={onBack}
         onViewModeChange={setViewMode}
         onToggleEdit={() => setIsEditMode(!isEditMode)}
@@ -212,6 +259,7 @@ export function FileViewer({
           }
           setShowCommentsPanel(!showCommentsPanel);
         }}
+        onPRFilterChange={setSelectedPR}
         onSave={handleSaveClick}
         onCancel={handleCancel}
         isDirty={isDirty}
@@ -220,12 +268,12 @@ export function FileViewer({
       {/* Content Area */}
       <div className="flex-1 flex overflow-hidden">
         {/* Content Widget */}
-        <div className="flex-1 flex flex-col overflow-hidden">{renderContentWidget()}</div>
+        <div className="flex-1 flex flex-col">{renderContentWidget()}</div>
 
         {/* Enrichment Panel */}
         {showCommentsPanel && (
           <div
-            className="h-full border-l overflow-hidden"
+            className="h-full border-l flex flex-col"
             style={{
               width: '500px',
               borderColor: 'var(--border-color)',

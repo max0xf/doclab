@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, MessageSquare, FileEdit, GitBranch, AlertCircle, Copy, Check } from 'lucide-react';
 import DiffViewer from './DiffViewer';
 import { CommentsTab } from './CommentsTab';
@@ -32,6 +32,11 @@ export default function EnrichmentPanel({
 }: EnrichmentPanelProps) {
   const [activeTab, setActiveTab] = useState<EnrichmentTab>(initialActiveTab);
   const [copied, setCopied] = useState(false);
+
+  // Update activeTab when initialActiveTab prop changes (e.g., when user clicks a line)
+  useEffect(() => {
+    setActiveTab(initialActiveTab);
+  }, [initialActiveTab]);
 
   const tabs: Array<{ id: EnrichmentTab; label: string; icon: React.ReactNode; count: number }> = [
     {
@@ -143,7 +148,7 @@ export default function EnrichmentPanel({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
         {/* All Tab - Raw Data */}
         {activeTab === 'all' && (
           <div className="h-full flex flex-col">
@@ -229,6 +234,7 @@ export default function EnrichmentPanel({
                     prAuthor={pr.pr_author}
                     prState={pr.pr_state}
                     prUrl={pr.pr_url}
+                    diffHunks={pr.diff_hunks}
                   />
                 ))}
               </div>

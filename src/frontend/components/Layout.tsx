@@ -446,7 +446,7 @@ export default function Layout({ navigate, children }: LayoutProps) {
       </div>
 
       {/* Main content */}
-      <div className={sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-64'}>
+      <div className={`flex flex-col h-screen ${sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-64'}`}>
         {/* Mobile menu button */}
         <div className="lg:hidden p-4">
           <button

@@ -1,5 +1,5 @@
 import React from 'react';
-import { MessageSquare, GitBranch, FileEdit, AlertCircle } from 'lucide-react';
+import { MessageSquare, FileEdit, AlertCircle } from 'lucide-react';
 import type { EnrichmentsResponse } from '../services/enrichmentApi';
 
 interface EnrichmentMarkersProps {
@@ -67,22 +67,7 @@ export default function EnrichmentMarkers({
     });
   }
 
-  // Check for PR diffs
-  if (enrichments.pr_diff && enrichments.pr_diff.length > 0) {
-    enrichments.pr_diff.forEach(pr => {
-      markers.push(
-        <button
-          key={`pr-${pr.pr_number}`}
-          onClick={() => onEnrichmentClick?.('pr_diff', pr.pr_number)}
-          className="hover:opacity-80 transition-opacity"
-          title={`PR #${pr.pr_number}: ${pr.pr_title}`}
-          style={{ padding: '2px' }}
-        >
-          <GitBranch size={14} style={{ color: '#9c27b0' }} />
-        </button>
-      );
-    });
-  }
+  // PR diffs are shown inline with green/red backgrounds, no need for gutter markers
 
   // Check for local changes
   if (enrichments.local_changes && enrichments.local_changes.length > 0) {
