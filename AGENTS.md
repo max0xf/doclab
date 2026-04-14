@@ -101,3 +101,29 @@ curl -H "Authorization: Bearer YOUR_TOKEN_HERE" \
 **Note**: The `.env` file contains the API token for local development and testing. Keep this file secure and never commit it to version control (it's already in `.gitignore`).
 
 **Rationale**: API tokens enable programmatic access for CI/CD, testing, and automation without exposing user passwords. Bearer token authentication is the standard for REST APIs and allows secure, revocable access.
+
+## File Corruption and Fixes
+
+When a file becomes corrupted or has errors after an edit:
+
+1. **NEVER use git commands to revert**: Do NOT use `git checkout`, `git reset`, or `git revert` to fix files
+2. **Always analyze and fix manually**: Read the file, understand the corruption, and fix it with proper edits
+3. **Use read_file to understand**: Read the corrupted section and surrounding context
+4. **Make targeted edits**: Use the edit tool to fix only the broken parts
+
+**Example of WRONG approach**:
+```bash
+# ❌ NEVER DO THIS
+git checkout src/frontend/components/MyFile.tsx
+git reset HEAD src/frontend/components/MyFile.tsx
+```
+
+**Example of CORRECT approach**:
+```
+1. Read the file to see the corruption
+2. Identify what's missing or broken
+3. Use edit tool to fix the specific issue
+4. Run linter to verify
+```
+
+**Rationale**: Using git commands to revert loses all the work done in the current session. It's better to understand what went wrong and fix it surgically. This also helps learn from mistakes and avoid repeating them.

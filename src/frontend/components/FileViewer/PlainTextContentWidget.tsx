@@ -8,6 +8,14 @@ import { ContentWidgetProps, VirtualLine, Enrichment } from './types';
  * Supports both view and edit modes.
  * Implements VirtualContent approach - original content enriched by enrichments.
  */
+// Helper function to count comments recursively including replies
+function countCommentsRecursively(comments: any[]): number {
+  return comments.reduce((total, comment) => {
+    const repliesCount = comment.replies ? countCommentsRecursively(comment.replies) : 0;
+    return total + 1 + repliesCount;
+  }, 0);
+}
+
 export function PlainTextContentWidget({
   fileName: _fileName,
   content,
@@ -270,23 +278,24 @@ export function PlainTextContentWidget({
 
               {/* Line Content */}
               <div className="flex-1 px-3 py-1 whitespace-pre-wrap break-all relative">
-                {vLine.content || ' '}
-
-                {/* Comment indicator on the right */}
+                {/* Comment Badge */}
                 {hasComments && (
                   <div
-                    className="absolute right-2 top-1 flex items-center gap-1 px-2 py-0.5 rounded text-xs"
+                    className="absolute -right-2 -top-1 px-1.5 py-0.5 text-xs font-medium rounded-full"
                     style={{
-                      backgroundColor: '#e3f2fd',
-                      color: '#0066cc',
+                      backgroundColor: '#0066cc',
+                      color: '#ffffff',
                     }}
                   >
-                    💬 {vLine.enrichments.filter(e => e.type === 'comment').length}
+                    💬{' '}
+                    {countCommentsRecursively(
+                      vLine.enrichments.filter(e => e.type === 'comment').map(e => e.data)
+                    )}
                   </div>
                 )}
 
-                {/* PR diff badge - show only on first line of each diff group (hunk) */}
-                {(isDeletion || isAddition) && vLine.prNumber && vLine.isFirstInDiffGroup && (
+                {/* PR Diff Badge */}
+                {vLine.prNumber && (
                   <div
                     className="absolute right-2 top-1 flex items-center gap-2 px-2 py-0.5 rounded text-xs font-semibold"
                     style={{

@@ -153,6 +153,13 @@
 
 ## 📋 TECHNICAL DEBT
 
+### Data Model
+- [ ] Migrate User model to UUID primary key
+  - Currently using Django's default User model with integer IDs
+  - All other models (FileComment, Space, Document) use UUIDs
+  - Would require custom User model and complex migration
+  - Low priority - current setup works fine
+
 ### Code Quality
 - [ ] Add JSDoc comments to all public functions
 - [ ] Add Python docstrings to all public methods
