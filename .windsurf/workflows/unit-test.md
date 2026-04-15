@@ -39,7 +39,33 @@ mock_response = create_mock_response(200, {'key': 'value'})
 - Common patterns (Model tests, Mock tests, Decorator tests)
 - Best practices (descriptive names, mocks for external deps, fast tests)
 
-## Step 4: Run Tests
+## Step 4: Validate Helper Functions
+
+**Check for common functions that should be in `test_helpers.py`:**
+
+1. **Scan test file for helper functions:**
+   - Functions that create mock objects (`Mock()`, mock responses, mock users)
+   - Functions used for setup/teardown
+   - Common assertion patterns
+   - Any function that could be reused
+
+2. **Extract to `test_helpers.py` if:**
+   - Function is used in 2+ test files
+   - Function creates mock objects (use `create_mock_response()`, `create_mock_user()`)
+   - Function has complex setup logic
+   - Function is a common assertion pattern
+
+3. **Update imports:**
+   ```python
+   from unit_tests.test_helpers import create_mock_response, create_mock_user
+   ```
+
+**❌ Anti-patterns to fix:**
+- `Mock()` for HTTP responses → use `create_mock_response()`
+- `Mock()` for user objects → use `create_mock_user()`
+- Duplicated helper functions across files → extract to `test_helpers.py`
+
+## Step 5: Run Tests
 
 **Always use the script to validate changes:**
 
@@ -61,6 +87,8 @@ cd src/backend
 Before committing:
 - [ ] Comprehensive header (Tested/Untested scenarios, Strategy)
 - [ ] Uses shared fixtures and helpers
+- [ ] No inline `Mock()` - uses `create_mock_response()` or `create_mock_user()`
+- [ ] No duplicated helper functions - extracted to `test_helpers.py`
 - [ ] Descriptive test names
 - [ ] Correct use of `@pytest.mark.django_db`
 - [ ] Tests are fast (< 5s each)
