@@ -1,25 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Folder, FileText, Loader2, MessageSquare, GitBranch } from 'lucide-react';
+import { ArrowLeft, Folder, FileText, MessageSquare, GitBranch } from 'lucide-react';
 import { enrichmentApi, type EnrichmentsResponse } from '../services/enrichmentApi';
 import type { Space } from '../types';
 import { apiClient } from '../services/apiClient';
 import { FileViewer } from './FileViewer';
-
-// Loading Spinner Component
-function LoadingSpinner({ message = 'Loading...' }: { message?: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-4 min-h-[400px]">
-      <Loader2 size={40} className="animate-spin" style={{ color: 'var(--primary)' }} />
-      <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-        {message}
-      </div>
-    </div>
-  );
-}
+import { fileMappingApi, type FileMapping } from '../services/fileMappingApi';
+import SmartLoadingIndicator from './SmartLoadingIndicator';
 
 interface MainViewProps {
   selectedSpace: Space | null;
   selectedPath: string | null;
+  viewMode?: 'developer' | 'document';
   children: React.ReactNode;
 }
 
@@ -37,10 +28,17 @@ interface FileItem {
  * - File content viewer when a file is selected
  * - The default view (spaces list, repositories, etc.) when no space is selected
  */
-export default function MainView({ selectedSpace, selectedPath, children }: MainViewProps) {
+export default function MainView({
+  selectedSpace,
+  selectedPath,
+  viewMode = 'document',
+  children,
+}: MainViewProps) {
   // If a space is selected, render the space content view
   if (selectedSpace) {
-    return <SpaceContentView space={selectedSpace} initialPath={selectedPath} />;
+    return (
+      <SpaceContentView space={selectedSpace} initialPath={selectedPath} viewMode={viewMode} />
+    );
   }
 
   // Otherwise, render the default view (passed as children)
@@ -50,9 +48,10 @@ export default function MainView({ selectedSpace, selectedPath, children }: Main
 interface SpaceContentViewProps {
   space: Space;
   initialPath: string | null;
+  viewMode: 'developer' | 'document';
 }
 
-function SpaceContentView({ space, initialPath }: SpaceContentViewProps) {
+function SpaceContentView({ space, initialPath, viewMode }: SpaceContentViewProps) {
   // Read path from URL on mount (handle hash routing)
   const hash = window.location.hash;
   const hashParts = hash.split('?');
@@ -66,8 +65,9 @@ function SpaceContentView({ space, initialPath }: SpaceContentViewProps) {
   const [fileContent, setFileContent] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [enrichmentCounts, setEnrichmentCounts] = useState<
-    Record<string, { comments: number; prs: number; diffs: number }>
+    Record<string, { comments: number; prNumbers: number[]; diffs: number }>
   >({});
+  const [spaceEnrichments, setSpaceEnrichments] = useState<Record<string, EnrichmentsResponse>>({});
 
   // Update URL when path changes
   const updatePath = (newPath: string) => {
@@ -98,6 +98,29 @@ function SpaceContentView({ space, initialPath }: SpaceContentViewProps) {
     selectedFile: selectedFile?.name,
     filesCount: files.length,
   });
+
+  // Load space-level enrichments once when space is opened
+  useEffect(() => {
+    const loadSpaceEnrichments = async () => {
+      try {
+        console.log('[Enrichments] Loading space-level enrichments for:', space.slug);
+        const response = await apiClient.request<Record<string, EnrichmentsResponse>>(
+          `/api/enrichments/v1/enrichments/?space_slug=${space.slug}`
+        );
+        console.log(
+          '[Enrichments] Space enrichments loaded:',
+          Object.keys(response).length,
+          'files'
+        );
+        setSpaceEnrichments(response);
+      } catch (error) {
+        console.error('[Enrichments] Failed to load space enrichments:', error);
+        setSpaceEnrichments({});
+      }
+    };
+
+    loadSpaceEnrichments();
+  }, [space.slug]);
 
   // Update currentPath when initialPath changes (from sidebar clicks)
   useEffect(() => {
@@ -221,45 +244,70 @@ function SpaceContentView({ space, initialPath }: SpaceContentViewProps) {
           console.log('Transformed items:', items);
           setFiles(items);
 
-          // Fetch enrichment counts for all files in one request using recursive flag
-          try {
-            const directorySourceUri = enrichmentApi.buildSourceUri(
-              space.git_provider || '',
-              space.git_base_url || '',
-              space.git_project_key || '',
-              space.git_repository_id || '',
-              space.git_default_branch || 'main',
-              currentPath
-            );
+          // Calculate enrichment counts from space enrichments
+          console.log('[Enrichments] Calculating counts for path:', currentPath || '(root)');
+          console.log(
+            '[Enrichments] Total space enrichments:',
+            Object.keys(spaceEnrichments).length
+          );
+          const counts: Record<string, { comments: number; prNumbers: number[]; diffs: number }> =
+            {};
 
-            console.log(
-              '[Enrichments] Fetching batch enrichments for directory:',
-              directorySourceUri
-            );
-            const allEnrichments = await enrichmentApi.getEnrichments(directorySourceUri, true);
-
-            // Process batch results
-            const counts: Record<string, { comments: number; prs: number; diffs: number }> = {};
-
-            // allEnrichments is Record<string, EnrichmentsResponse> when recursive=true
-            if (typeof allEnrichments === 'object' && !('comments' in allEnrichments)) {
-              Object.entries(allEnrichments).forEach(([sourceUri, enrichmentData]) => {
-                // Extract filename from source URI (last part after /)
-                const fileName = sourceUri.split('/').pop() || '';
-                counts[fileName] = {
-                  comments: enrichmentData.comments?.length || 0,
-                  prs: enrichmentData.pr_diff?.length || 0,
-                  diffs: enrichmentData.diff?.length || 0,
+          items.forEach(item => {
+            if (item.type === 'file') {
+              // For files, get direct enrichment counts
+              const enrichment = spaceEnrichments[item.path];
+              if (enrichment) {
+                const prNumbers = Array.isArray(enrichment.pr_diff)
+                  ? enrichment.pr_diff.map((pr: any) => pr.pr_number)
+                  : [];
+                counts[item.path] = {
+                  comments: Array.isArray(enrichment.comments) ? enrichment.comments.length : 0,
+                  prNumbers: prNumbers,
+                  diffs: Array.isArray(enrichment.diff) ? enrichment.diff.length : 0,
                 };
-              });
-              console.log('[Enrichments] Batch enrichments loaded:', counts);
-            }
+              }
+            } else {
+              // For folders, aggregate unique PR numbers from all files within them
+              const folderPrefix = item.path + '/';
+              let totalComments = 0;
+              const uniquePrNumbers = new Set<number>();
+              let totalDiffs = 0;
+              let matchedFiles = 0;
 
-            setEnrichmentCounts(counts);
-          } catch (error) {
-            console.error('[Enrichments] Failed to load batch enrichments:', error);
-            setEnrichmentCounts({});
-          }
+              Object.entries(spaceEnrichments).forEach(([filePath, enrichment]) => {
+                if (filePath.startsWith(folderPrefix)) {
+                  matchedFiles++;
+                  totalComments += Array.isArray(enrichment.comments)
+                    ? enrichment.comments.length
+                    : 0;
+                  if (Array.isArray(enrichment.pr_diff)) {
+                    enrichment.pr_diff.forEach((pr: any) => {
+                      if (pr.pr_number) {
+                        uniquePrNumbers.add(pr.pr_number);
+                      }
+                    });
+                  }
+                  totalDiffs += Array.isArray(enrichment.diff) ? enrichment.diff.length : 0;
+                }
+              });
+
+              if (totalComments > 0 || uniquePrNumbers.size > 0 || totalDiffs > 0) {
+                const prNumbers = Array.from(uniquePrNumbers).sort((a, b) => b - a);
+                console.log(
+                  `[Enrichments] Folder ${item.path}: ${matchedFiles} files, PRs: ${prNumbers.join(', ')}`
+                );
+                counts[item.path] = {
+                  comments: totalComments,
+                  prNumbers: prNumbers,
+                  diffs: totalDiffs,
+                };
+              }
+            }
+          });
+
+          console.log('[Enrichments] Calculated counts for directory:', counts);
+          setEnrichmentCounts(counts);
         }
       } catch (error) {
         console.error('Failed to load content:', error);
@@ -278,7 +326,7 @@ function SpaceContentView({ space, initialPath }: SpaceContentViewProps) {
     };
 
     loadContent();
-  }, [space, currentPath]);
+  }, [space, currentPath, spaceEnrichments]);
 
   // Load file content when a file is selected
   useEffect(() => {
@@ -377,6 +425,7 @@ function SpaceContentView({ space, initialPath }: SpaceContentViewProps) {
       enrichmentCounts={enrichmentCounts}
       onFileClick={handleFileClick}
       onNavigateUp={handleNavigateUp}
+      viewMode={viewMode}
     />
   );
 }
@@ -386,9 +435,10 @@ interface FileBrowserViewProps {
   files: FileItem[];
   currentPath: string;
   isLoading: boolean;
-  enrichmentCounts: Record<string, { comments: number; prs: number; diffs: number }>;
+  enrichmentCounts: Record<string, { comments: number; prNumbers: number[]; diffs: number }>;
   onFileClick: (file: FileItem) => void;
   onNavigateUp: () => void;
+  viewMode: 'developer' | 'document';
 }
 
 function FileBrowserView({
@@ -399,7 +449,82 @@ function FileBrowserView({
   enrichmentCounts,
   onFileClick,
   onNavigateUp,
+  viewMode,
 }: FileBrowserViewProps) {
+  const [mappings, setMappings] = useState<Map<string, FileMapping>>(new Map());
+
+  // Load file mappings
+  useEffect(() => {
+    const loadMappings = async () => {
+      try {
+        const mappingsData = await fileMappingApi.list(space.slug);
+        const mappingsMap = new Map<string, FileMapping>();
+        mappingsData.forEach(m => {
+          mappingsMap.set(m.file_path, m);
+          if (m.file_path.includes('TEST') || m.file_path === 'TEST') {
+            console.log('[Mappings] TEST file mapping:', m);
+          }
+        });
+        console.log('[Mappings] Loaded', mappingsData.length, 'mappings');
+        console.log('[Mappings] All mapping paths:', Array.from(mappingsMap.keys()));
+        setMappings(mappingsMap);
+      } catch (error) {
+        console.error('Failed to load mappings:', error);
+      }
+    };
+    loadMappings();
+  }, [space.slug]);
+
+  // Apply display names and filters
+  const getDisplayName = (file: FileItem): string => {
+    // In developer mode, always show original filename
+    if (viewMode === 'developer') {
+      return file.name;
+    }
+    // In document mode, use custom display name if available
+    const mapping = mappings.get(file.path);
+    if (mapping && file.name === 'README.md') {
+      console.log('[DisplayName] README.md mapping:', {
+        filePath: file.path,
+        mappingPath: mapping.file_path,
+        displayName: mapping.effective_display_name,
+      });
+    }
+    return mapping?.effective_display_name || file.name;
+  };
+
+  const isFileVisible = (file: FileItem): boolean => {
+    // In developer mode, show everything
+    if (viewMode === 'developer') {
+      return true;
+    }
+
+    // In document mode, apply filters and visibility
+    const mapping = mappings.get(file.path);
+    const filters = space.filters || [];
+
+    // Folders are always visible (unless explicitly hidden)
+    if (file.type === 'directory') {
+      return mapping?.effective_is_visible ?? true;
+    }
+
+    // Files: check visibility and filters
+    const isVisible = mapping?.effective_is_visible ?? true;
+    if (!isVisible) {
+      return false;
+    }
+
+    // Apply filters only to files
+    if (filters.length > 0) {
+      return filters.some(filter => file.path.endsWith(filter));
+    }
+
+    return true;
+  };
+
+  // Filter files based on view mode
+  const visibleFiles = files.filter(isFileVisible);
+
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
       {/* Header */}
@@ -431,19 +556,26 @@ function FileBrowserView({
       {/* File List */}
       <div className="flex-1 overflow-auto">
         {isLoading ? (
-          <LoadingSpinner message="Loading directory contents..." />
-        ) : files.length === 0 ? (
+          <SmartLoadingIndicator message="Loading directory contents..." />
+        ) : visibleFiles.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center" style={{ color: 'var(--text-secondary)' }}>
-              No files found
+              {files.length === 0 ? 'No files found' : 'No files match the current filter'}
             </div>
           </div>
         ) : (
           <div>
-            {files.map(file => {
-              const enrichments = enrichmentCounts[file.path] || { comments: 0, prs: 0, diffs: 0 };
+            {visibleFiles.map(file => {
+              const enrichments = enrichmentCounts[file.path] || {
+                comments: 0,
+                prNumbers: [],
+                diffs: 0,
+              };
               const hasEnrichments =
-                enrichments.comments > 0 || enrichments.prs > 0 || enrichments.diffs > 0;
+                enrichments.comments > 0 ||
+                enrichments.prNumbers.length > 0 ||
+                enrichments.diffs > 0;
+              const displayName = getDisplayName(file);
 
               return (
                 <button
@@ -466,13 +598,13 @@ function FileBrowserView({
                       className={file.type === 'directory' ? 'font-medium' : ''}
                       style={{ color: 'var(--text-primary)' }}
                     >
-                      {file.name}
+                      {displayName}
                     </span>
                   </div>
 
                   {/* Comments Column */}
                   <div className="col-span-2 flex items-center justify-center">
-                    {file.type === 'file' && enrichments.comments > 0 && (
+                    {enrichments.comments > 0 && (
                       <span
                         className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs"
                         style={{
@@ -488,16 +620,19 @@ function FileBrowserView({
 
                   {/* PRs Column */}
                   <div className="col-span-2 flex items-center justify-center gap-1 flex-wrap">
-                    {file.type === 'file' && enrichments.prs > 0 && (
+                    {enrichments.prNumbers.length > 0 && (
                       <span
                         className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium"
                         style={{
                           backgroundColor: '#6f42c1',
                           color: 'white',
                         }}
+                        title={`PRs: ${enrichments.prNumbers.join(', ')}`}
                       >
                         <GitBranch size={12} />
-                        {enrichments.prs}
+                        {enrichments.prNumbers.slice(0, 3).join(', ')}
+                        {enrichments.prNumbers.length > 3 &&
+                          ` +${enrichments.prNumbers.length - 3}`}
                       </span>
                     )}
                   </div>
@@ -545,8 +680,18 @@ function FileContentView({
     }
 
     try {
+      console.log('[FileContentView] Loading enrichments for:', {
+        file: file.path,
+        sourceUri,
+      });
       const response = await enrichmentApi.getEnrichments(sourceUri);
-      console.log('[FileContentView] Loaded enrichments:', response);
+      console.log('[FileContentView] Loaded enrichments:', {
+        comments: Array.isArray(response.comments) ? response.comments.length : 0,
+        pr_diff: Array.isArray(response.pr_diff) ? response.pr_diff.length : 0,
+        diff: Array.isArray(response.diff) ? response.diff.length : 0,
+        local_changes: Array.isArray(response.local_changes) ? response.local_changes.length : 0,
+        raw: response,
+      });
       setEnrichments(response || {});
     } catch (error) {
       console.error('[FileContentView] Failed to load enrichments:', error);
@@ -585,7 +730,7 @@ function FileContentView({
   };
 
   if (isLoading) {
-    return <LoadingSpinner message="Loading file content..." />;
+    return <SmartLoadingIndicator message="Loading file content..." />;
   }
 
   return (

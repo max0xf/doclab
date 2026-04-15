@@ -23,6 +23,7 @@ export default function Layout({ navigate, children }: LayoutProps) {
   const [allSpaces, setAllSpaces] = useState<Space[]>([]);
   const [selectedSpace, setSelectedSpace] = useState<Space | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'developer' | 'document'>('document');
   const [loading, setLoading] = useState(true);
 
   const currentView = window.location.hash.slice(1).split('?')[0] || Urls.Dashboard;
@@ -332,6 +333,8 @@ export default function Layout({ navigate, children }: LayoutProps) {
                 space={selectedSpace}
                 onSelectFile={setSelectedPath}
                 spaceName={selectedSpace.name}
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
               />
             </div>
           )}
@@ -459,7 +462,7 @@ export default function Layout({ navigate, children }: LayoutProps) {
         </div>
 
         <main className="flex-1 flex flex-col overflow-hidden">
-          <MainView selectedSpace={selectedSpace} selectedPath={selectedPath}>
+          <MainView selectedSpace={selectedSpace} selectedPath={selectedPath} viewMode={viewMode}>
             {children}
           </MainView>
         </main>

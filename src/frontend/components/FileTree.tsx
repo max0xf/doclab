@@ -242,7 +242,9 @@ export default function FileTree({
 
           {/* File/folder name */}
           <span className="text-sm truncate" style={{ minWidth: '200px', maxWidth: '300px' }}>
-            {config?.displayName || node.title || node.name || node.path.split('/').pop()}
+            {configMode
+              ? node.title || node.name || node.path.split('/').pop()
+              : config?.displayName || node.title || node.name || node.path.split('/').pop()}
           </span>
 
           {/* Config mode: Display As dropdown (for self) */}

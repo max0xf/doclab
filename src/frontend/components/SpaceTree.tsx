@@ -5,16 +5,21 @@ import { fileMappingApi } from '../services/fileMappingApi';
 import type { Space } from '../types';
 import type { FileMapping } from '../services/fileMappingApi';
 
-type ViewMode = 'developer' | 'document';
-
 interface SpaceTreeProps {
   space: Space;
   spaceName: string;
   onSelectFile?: (path: string) => void;
+  viewMode?: 'developer' | 'document';
+  onViewModeChange?: (mode: 'developer' | 'document') => void;
 }
 
-export default function SpaceTree({ space, spaceName, onSelectFile }: SpaceTreeProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>('document');
+export default function SpaceTree({
+  space,
+  spaceName,
+  onSelectFile,
+  viewMode = 'document',
+  onViewModeChange,
+}: SpaceTreeProps) {
   const [mappings, setMappings] = useState<Map<string, FileMapping>>(new Map());
 
   // Load file mappings
@@ -59,7 +64,8 @@ export default function SpaceTree({ space, spaceName, onSelectFile }: SpaceTreeP
 
     return {
       isVisible,
-      displayName: mapping?.effective_display_name,
+      // In developer mode, don't override display name (use original from tree)
+      displayName: viewMode === 'developer' ? undefined : mapping?.effective_display_name,
       source: mapping?.display_name_source || space.default_display_name_source || 'first_h1',
     };
   };
@@ -75,7 +81,7 @@ export default function SpaceTree({ space, spaceName, onSelectFile }: SpaceTreeP
           style={{ backgroundColor: 'var(--bg-secondary)' }}
         >
           <button
-            onClick={() => setViewMode('document')}
+            onClick={() => onViewModeChange?.('document')}
             className="p-1 rounded transition-colors"
             style={{
               backgroundColor: viewMode === 'document' ? 'var(--sidebar-active)' : 'transparent',
@@ -86,7 +92,7 @@ export default function SpaceTree({ space, spaceName, onSelectFile }: SpaceTreeP
             <BookOpen className="w-3 h-3" />
           </button>
           <button
-            onClick={() => setViewMode('developer')}
+            onClick={() => onViewModeChange?.('developer')}
             className="p-1 rounded transition-colors"
             style={{
               backgroundColor: viewMode === 'developer' ? 'var(--sidebar-active)' : 'transparent',
