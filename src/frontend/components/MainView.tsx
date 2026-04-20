@@ -672,6 +672,46 @@ function FileContentView({
   sourceUri,
 }: FileContentViewProps) {
   const [enrichments, setEnrichments] = useState<EnrichmentsResponse>({});
+  const [mappings, setMappings] = useState<Map<string, FileMapping>>(new Map());
+  const [breadcrumbPath, setBreadcrumbPath] = useState<string>('');
+
+  // Load file mappings
+  useEffect(() => {
+    const loadMappings = async () => {
+      try {
+        const mappingsData = await fileMappingApi.list(space.slug);
+        const mappingsMap = new Map<string, FileMapping>();
+        mappingsData.forEach(m => {
+          mappingsMap.set(m.file_path, m);
+        });
+        setMappings(mappingsMap);
+      } catch (error) {
+        console.error('[FileContentView] Failed to load mappings:', error);
+      }
+    };
+    loadMappings();
+  }, [space.slug]);
+
+  // Build breadcrumb path with mapped names
+  useEffect(() => {
+    if (!file || mappings.size === 0) {
+      setBreadcrumbPath(file?.path || '');
+      return;
+    }
+
+    const pathParts = file.path.split('/');
+    const mappedParts: string[] = [];
+    let currentPath = '';
+
+    for (let i = 0; i < pathParts.length; i++) {
+      currentPath = i === 0 ? pathParts[i] : `${currentPath}/${pathParts[i]}`;
+      const mapping = mappings.get(currentPath);
+      const displayName = mapping?.effective_display_name || pathParts[i];
+      mappedParts.push(displayName);
+    }
+
+    setBreadcrumbPath(mappedParts.join(' / '));
+  }, [file, mappings]);
 
   // Load enrichments function
   const loadEnrichments = async () => {
@@ -733,10 +773,15 @@ function FileContentView({
     return <SmartLoadingIndicator message="Loading file content..." />;
   }
 
+  // Get display name for the file
+  const fileMapping = mappings.get(file.path);
+  const displayFileName = fileMapping?.effective_display_name || file.name;
+
   return (
     <FileViewer
-      fileName={file.name}
+      fileName={displayFileName}
       filePath={file.path}
+      breadcrumbPath={breadcrumbPath}
       spaceName={space.name}
       content={fileContent}
       enrichments={enrichments}

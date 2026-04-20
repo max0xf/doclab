@@ -9,6 +9,7 @@ import type { EnrichmentsResponse } from '../../services/enrichmentApi';
 interface FileViewerProps {
   fileName: string;
   filePath: string;
+  breadcrumbPath?: string;
   spaceName: string;
   content: string;
   enrichments: EnrichmentsResponse;
@@ -21,6 +22,7 @@ interface FileViewerProps {
 export function FileViewer({
   fileName,
   filePath,
+  breadcrumbPath,
   spaceName,
   content,
   enrichments: enrichmentsResponse,
@@ -243,6 +245,7 @@ export function FileViewer({
       <FileViewerHeader
         fileName={fileName}
         filePath={filePath}
+        breadcrumbPath={breadcrumbPath}
         spaceName={spaceName}
         viewMode={viewMode}
         isEditMode={isEditMode}

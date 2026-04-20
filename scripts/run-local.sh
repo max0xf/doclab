@@ -38,13 +38,24 @@ if [ ! -d "$BACKEND_DIR" ]; then
   exit 1
 fi
 
-# Kill any existing backend processes
-echo "Checking for existing backend processes..."
-EXISTING_PIDS=$(pgrep -f "manage.py runserver" || true)
-if [ -n "$EXISTING_PIDS" ]; then
-  echo "Stopping existing backend processes: $EXISTING_PIDS"
-  pkill -f "manage.py runserver" || true
+# Kill any processes using port 8000 (backend)
+echo "Checking if port 8000 is in use..."
+BACKEND_PORT_PIDS=$(lsof -ti:8000 || true)
+if [ -n "$BACKEND_PORT_PIDS" ]; then
+  echo "Port 8000 is busy. Killing processes: $BACKEND_PORT_PIDS"
+  kill -9 $BACKEND_PORT_PIDS || true
   sleep 1
+  echo "Port 8000 cleared"
+fi
+
+# Kill any processes using port 3000 (frontend)
+echo "Checking if port 3000 is in use..."
+FRONTEND_PORT_PIDS=$(lsof -ti:3000 || true)
+if [ -n "$FRONTEND_PORT_PIDS" ]; then
+  echo "Port 3000 is busy. Killing processes: $FRONTEND_PORT_PIDS"
+  kill -9 $FRONTEND_PORT_PIDS || true
+  sleep 1
+  echo "Port 3000 cleared"
 fi
 
 # Start backend in background

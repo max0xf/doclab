@@ -6,6 +6,7 @@ import { ViewMode } from './types';
 interface FileViewerHeaderProps {
   fileName: string;
   filePath: string;
+  breadcrumbPath?: string;
   spaceName: string;
   viewMode: ViewMode;
   isEditMode: boolean;
@@ -24,8 +25,9 @@ interface FileViewerHeaderProps {
 }
 
 export function FileViewerHeader({
-  fileName,
+  fileName: _fileName,
   filePath,
+  breadcrumbPath,
   spaceName,
   viewMode,
   isEditMode,
@@ -64,10 +66,7 @@ export function FileViewerHeader({
           Back
         </button>
         <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-          {spaceName} / {filePath}
-        </div>
-        <div className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-          {fileName}
+          {spaceName} / {breadcrumbPath || filePath}
         </div>
       </div>
 
