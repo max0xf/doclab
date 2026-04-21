@@ -22,6 +22,7 @@ export enum EnrichmentCategory {
 export enum EnrichmentType {
   // Reference enrichments - don't modify content
   COMMENT = 'comment',
+  CONFLICT = 'conflict',
 
   // Diff enrichments - modify content
   PR = 'pr_diff',

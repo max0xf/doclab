@@ -1,10 +1,3 @@
-/**
- * Virtual Content Builder
- *
- * Builds layered virtual content from original content and enrichments.
- * Each enrichment creates a new layer, allowing natural conflict detection.
- */
-
 import {
   Enrichment,
   EnrichmentType,
@@ -22,6 +15,12 @@ export class VirtualContentBuilder {
   private enrichments: Enrichment[];
   private options: VirtualContentBuildOptions;
 
+  // Tracks which original line numbers have been claimed by which enrichment.
+  // When a new enrichment tries to modify an already-claimed line, it's a conflict.
+  private claimedRanges = new Map<number, Enrichment>();
+  private generatedConflicts: Enrichment[] = [];
+  private nextConflictId = 1;
+
   constructor(
     originalContent: string,
     enrichments: Enrichment[],
@@ -37,73 +36,52 @@ export class VirtualContentBuilder {
     };
   }
 
-  /**
-   * Build the complete layered virtual content
-   */
   build(): LayeredVirtualContent {
-    console.group('[VirtualContentBuilder] Building layered content');
-    console.log('Original lines:', this.originalLines.length);
-    console.log('Total enrichments:', this.enrichments.length);
-
-    // Separate enrichments by category
     const diffEnrichments = this.enrichments.filter(e => this.isDiffEnrichment(e));
     const referenceEnrichments = this.enrichments.filter(e => !this.isDiffEnrichment(e));
+    const sorted = this.sortEnrichmentsByPriority(diffEnrichments);
 
-    console.log('Diff enrichments:', diffEnrichments.length);
-    console.log('Reference enrichments:', referenceEnrichments.length);
+    console.log(
+      `[VirtualContent] Build start: ${this.originalLines.length} original lines, ` +
+        `${sorted.length} diff enrichments, ${referenceEnrichments.length} reference enrichments`
+    );
 
-    // Sort diff enrichments by priority (pr_diff -> commit -> edit)
-    const sortedDiffEnrichments = this.sortEnrichmentsByPriority(diffEnrichments);
+    const layers: VirtualContentLayer[] = [this.buildOriginalLayer()];
+    let previousLayer = layers[0];
 
-    // Build layers
-    const layers: VirtualContentLayer[] = [];
-
-    // Layer 0: Original content
-    const layer0 = this.buildOriginalLayer();
-    layers.push(layer0);
-
-    // Apply each diff enrichment as a new layer
-    let previousLayer = layer0;
-    for (let i = 0; i < sortedDiffEnrichments.length; i++) {
-      const enrichment = sortedDiffEnrichments[i];
-      console.log(`Building layer ${i + 1} for enrichment type: ${enrichment.type}`);
-
+    for (let i = 0; i < sorted.length; i++) {
+      const enrichment = sorted[i];
       const newLayer = this.applyDiffEnrichment(previousLayer, enrichment, i + 1);
       layers.push(newLayer);
       previousLayer = newLayer;
     }
 
-    // Get final lines from last layer
     const finalLines = layers[layers.length - 1].lines;
 
-    // Add reference enrichments to final lines
-    this.applyReferenceEnrichments(finalLines, referenceEnrichments);
+    // Apply comments + generated conflict enrichments as reference overlays
+    const allReferenceEnrichments = [...referenceEnrichments, ...this.generatedConflicts];
+    this.applyReferenceEnrichments(finalLines, allReferenceEnrichments);
 
-    // Detect conflicts
-    const conflictInfo = this.detectConflicts(layers);
-
-    // Build enrichments map
     const enrichmentsByType = new Map<string, Enrichment[]>();
     this.enrichments.forEach(e => {
-      const type = e.type;
-      if (!enrichmentsByType.has(type)) {
-        enrichmentsByType.set(type, []);
+      if (!enrichmentsByType.has(e.type)) {
+        enrichmentsByType.set(e.type, []);
       }
-      enrichmentsByType.get(type)!.push(e);
+      enrichmentsByType.get(e.type)!.push(e);
     });
 
-    // Calculate statistics
+    const conflictLines = new Set(this.generatedConflicts.map(c => c.lineStart));
     const stats = {
       totalLayers: layers.length,
       totalLines: finalLines.length,
       insertedLines: finalLines.filter(l => l.isInsertedLine).length,
-      conflictCount: conflictInfo.conflictLines.size,
+      conflictCount: this.generatedConflicts.length,
     };
 
-    console.log('Layers built:', layers.length);
-    console.log('Final lines:', finalLines.length);
-    console.log('Conflicts detected:', stats.conflictCount);
-    console.groupEnd();
+    console.log(
+      `[VirtualContent] Build complete: ${stats.totalLines} lines total, ` +
+        `${stats.insertedLines} inserted, ${stats.conflictCount} conflict(s)`
+    );
 
     return {
       originalContent: this.originalContent,
@@ -112,15 +90,12 @@ export class VirtualContentBuilder {
       finalLines,
       enrichments: this.enrichments,
       enrichmentsByType,
-      hasConflicts: conflictInfo.hasConflicts,
-      conflictLines: conflictInfo.conflictLines,
+      hasConflicts: this.generatedConflicts.length > 0,
+      conflictLines,
       stats,
     };
   }
 
-  /**
-   * Build layer 0 (original content)
-   */
   private buildOriginalLayer(): VirtualContentLayer {
     const lines: VirtualLine[] = this.originalLines.map((content, index) => ({
       lineNumber: index + 1,
@@ -131,55 +106,73 @@ export class VirtualContentBuilder {
       isInsertedLine: false,
       layerIndex: 0,
     }));
-
-    return {
-      layerIndex: 0,
-      lines,
-    };
+    return { layerIndex: 0, lines };
   }
 
-  /**
-   * Apply a diff enrichment to create a new layer
-   */
   private applyDiffEnrichment(
     previousLayer: VirtualContentLayer,
     enrichment: Enrichment,
     layerIndex: number
   ): VirtualContentLayer {
-    const newLines: VirtualLine[] = [];
     const enrichmentData = enrichment.data as any;
-    const diffHunks =
-      enrichmentData.diff_hunks || enrichmentData.current_hunk ? [enrichmentData.current_hunk] : [];
+    const diffHunks = enrichmentData.current_hunk
+      ? [enrichmentData.current_hunk]
+      : enrichmentData.diff_hunks || [];
+
+    const label = this.enrichmentLabel(enrichment);
 
     if (!diffHunks || diffHunks.length === 0) {
-      // No diffs, just copy previous layer
+      console.log(`[VirtualContent] Layer ${layerIndex} — ${label}: no hunks, skipped`);
       return {
         layerIndex,
         enrichment,
-        lines: previousLayer.lines.map(line => ({
-          ...line,
-          layerIndex,
-        })),
+        lines: previousLayer.lines.map(line => ({ ...line, layerIndex })),
       };
     }
 
-    // Process each hunk
+    // Pre-scan: decide per hunk whether to apply or generate a conflict enrichment.
+    // This must be done before iterating lines so we don't partially claim ranges.
+    const hunksToApply = new Set<string>();
+
+    for (const hunk of diffHunks) {
+      const hunkKey = `${hunk.old_start}-${hunk.old_count}`;
+      const rangeEnd = hunk.old_start + Math.max(hunk.old_count - 1, 0);
+      const conflicting = this.checkHunkConflict(hunk);
+
+      if (conflicting) {
+        const conflictLabel = this.enrichmentLabel(conflicting);
+        console.log(
+          `[VirtualContent] Layer ${layerIndex} — ${label} hunk @${hunk.old_start}-${rangeEnd}: ` +
+            `CONFLICT with ${conflictLabel} → conflict enrichment at line ${hunk.old_start}`
+        );
+        this.generatedConflicts.push(this.createConflictEnrichment(conflicting, enrichment, hunk));
+      } else {
+        this.claimHunkRange(hunk, enrichment);
+        hunksToApply.add(hunkKey);
+        console.log(
+          `[VirtualContent] Layer ${layerIndex} — ${label} hunk @${hunk.old_start}-${rangeEnd}: applying`
+        );
+      }
+    }
+
+    // Build the new layer, inserting diff lines only for non-conflicting hunks.
+    const newLines: VirtualLine[] = [];
     const processedHunks = new Set<string>();
     let virtualLineNum = 1;
 
     previousLayer.lines.forEach(prevLine => {
-      // Check if this line is the start of a hunk
       const matchingHunk = diffHunks.find((hunk: any) => {
         const hunkKey = `${hunk.old_start}-${hunk.old_count}`;
-        return hunk.old_start === prevLine.lineNumber && !processedHunks.has(hunkKey);
+        return (
+          hunk.old_start === prevLine.lineNumber &&
+          !processedHunks.has(hunkKey) &&
+          hunksToApply.has(hunkKey)
+        );
       });
 
       if (matchingHunk) {
-        // Mark hunk as processed
         const hunkKey = `${matchingHunk.old_start}-${matchingHunk.old_count}`;
         processedHunks.add(hunkKey);
-
-        // Insert diff lines
         const diffLines = this.processDiffHunk(
           matchingHunk,
           enrichment,
@@ -187,13 +180,9 @@ export class VirtualContentBuilder {
           prevLine.lineNumber
         );
         diffLines.forEach(diffLine => {
-          newLines.push({
-            ...diffLine,
-            virtualLineNumber: virtualLineNum++,
-          });
+          newLines.push({ ...diffLine, virtualLineNumber: virtualLineNum++ });
         });
       } else {
-        // Copy line from previous layer
         newLines.push({
           ...prevLine,
           layerIndex,
@@ -203,16 +192,14 @@ export class VirtualContentBuilder {
       }
     });
 
-    return {
-      layerIndex,
-      enrichment,
-      lines: newLines,
-    };
+    const inserted = newLines.filter(l => l.isInsertedLine && l.layerIndex === layerIndex).length;
+    console.log(
+      `  → Layer ${layerIndex} result: ${newLines.length} lines, ${inserted} new diff lines`
+    );
+
+    return { layerIndex, enrichment, lines: newLines };
   }
 
-  /**
-   * Process a diff hunk and return virtual lines
-   */
   private processDiffHunk(
     hunk: any,
     enrichment: Enrichment,
@@ -220,56 +207,49 @@ export class VirtualContentBuilder {
     originalLineNumber: number
   ): VirtualLine[] {
     const lines: VirtualLine[] = [];
-    let lastDiffType: DiffType | null = null;
+    let isFirstDiffLine = true;
 
     hunk.lines.forEach((hunkLine: string) => {
       const prefix = hunkLine[0];
       const content = hunkLine.slice(1);
 
       if (prefix === '-') {
-        // Deletion
-        const isFirst = lastDiffType !== DiffType.DELETION;
         lines.push({
           lineNumber: originalLineNumber,
-          virtualLineNumber: 0, // Will be set later
+          virtualLineNumber: 0,
           content,
           enrichments: [],
           sourceEnrichment: enrichment,
           isOriginalLine: false,
           isInsertedLine: true,
           diffType: DiffType.DELETION,
-          isFirstInDiffGroup: isFirst,
+          isFirstInDiffGroup: isFirstDiffLine,
           layerIndex,
           ...this.getEnrichmentMetadata(enrichment),
         });
-        lastDiffType = DiffType.DELETION;
+        isFirstDiffLine = false;
       } else if (prefix === '+') {
-        // Addition
-        const isFirst = lastDiffType !== DiffType.ADDITION;
         lines.push({
           lineNumber: originalLineNumber,
-          virtualLineNumber: 0, // Will be set later
+          virtualLineNumber: 0,
           content,
           enrichments: [],
           sourceEnrichment: enrichment,
           isOriginalLine: false,
           isInsertedLine: true,
           diffType: DiffType.ADDITION,
-          isFirstInDiffGroup: isFirst,
+          isFirstInDiffGroup: isFirstDiffLine,
           layerIndex,
           ...this.getEnrichmentMetadata(enrichment),
         });
-        lastDiffType = DiffType.ADDITION;
+        isFirstDiffLine = false;
       }
-      // Skip context lines - they're already in the previous layer
+      // Context lines (' ') are already present in the previous layer — skip them.
     });
 
     return lines;
   }
 
-  /**
-   * Get enrichment-specific metadata for virtual lines
-   */
   private getEnrichmentMetadata(enrichment: Enrichment): Partial<VirtualLine> {
     const data = enrichment.data as any;
     const metadata: Partial<VirtualLine> = {};
@@ -288,15 +268,9 @@ export class VirtualContentBuilder {
     return metadata;
   }
 
-  /**
-   * Apply reference enrichments (comments) to final lines
-   */
   private applyReferenceEnrichments(finalLines: VirtualLine[], referenceEnrichments: Enrichment[]) {
     referenceEnrichments.forEach(enrichment => {
-      const lineStart = enrichment.lineStart;
-      const lineEnd = enrichment.lineEnd;
-
-      for (let lineNum = lineStart; lineNum <= lineEnd; lineNum++) {
+      for (let lineNum = enrichment.lineStart; lineNum <= enrichment.lineEnd; lineNum++) {
         const line = finalLines.find(l => l.lineNumber === lineNum);
         if (line) {
           line.enrichments.push(enrichment);
@@ -305,64 +279,62 @@ export class VirtualContentBuilder {
     });
   }
 
-  /**
-   * Detect conflicts between layers
-   */
-  private detectConflicts(layers: VirtualContentLayer[]): {
-    hasConflicts: boolean;
-    conflictLines: Set<number>;
-  } {
-    const conflictLines = new Set<number>();
+  // --- Conflict helpers ---
 
-    if (!this.options.detectConflicts || layers.length <= 1) {
-      return { hasConflicts: false, conflictLines };
-    }
-
-    // Check each line in the final layer
-    const finalLayer = layers[layers.length - 1];
-
-    finalLayer.lines.forEach(line => {
-      // Count how many different enrichments modified this line
-      const modifyingEnrichments = new Set<string>();
-
-      layers.forEach(layer => {
-        if (layer.enrichment) {
-          const layerLine = layer.lines.find(
-            l => l.lineNumber === line.lineNumber && l.isInsertedLine
-          );
-          if (layerLine) {
-            modifyingEnrichments.add(layer.enrichment.type);
-          }
-        }
-      });
-
-      // Conflict if 2+ enrichments modified the same line
-      if (modifyingEnrichments.size >= 2) {
-        conflictLines.add(line.lineNumber);
-        line.hasConflict = true;
-        line.conflictingEnrichments = layers
-          .filter(l => l.enrichment)
-          .map(l => l.enrichment!)
-          .filter(e => modifyingEnrichments.has(e.type));
+  private checkHunkConflict(hunk: any): Enrichment | null {
+    const rangeEnd = hunk.old_start + Math.max(hunk.old_count - 1, 0);
+    for (let ln = hunk.old_start; ln <= rangeEnd; ln++) {
+      const existing = this.claimedRanges.get(ln);
+      if (existing) {
+        return existing;
       }
-    });
+    }
+    return null;
+  }
 
+  private claimHunkRange(hunk: any, enrichment: Enrichment): void {
+    const rangeEnd = hunk.old_start + Math.max(hunk.old_count - 1, 0);
+    for (let ln = hunk.old_start; ln <= rangeEnd; ln++) {
+      this.claimedRanges.set(ln, enrichment);
+    }
+  }
+
+  private createConflictEnrichment(
+    firstEnrichment: Enrichment,
+    secondEnrichment: Enrichment,
+    hunk: any
+  ): Enrichment {
     return {
-      hasConflicts: conflictLines.size > 0,
-      conflictLines,
+      id: `conflict-${this.nextConflictId++}`,
+      type: EnrichmentType.CONFLICT,
+      lineStart: hunk.old_start,
+      lineEnd: hunk.old_start + Math.max(hunk.old_count - 1, 0),
+      data: {
+        firstEnrichment,
+        secondEnrichment,
+        hunk,
+      },
     };
   }
 
-  /**
-   * Check if enrichment is a diff type
-   */
+  private enrichmentLabel(enrichment: Enrichment): string {
+    const d = enrichment.data as any;
+    if (enrichment.type === EnrichmentType.PR) {
+      return `pr_diff PR#${d.pr_number}`;
+    }
+    if (enrichment.type === EnrichmentType.COMMIT) {
+      return `commit ${String(d.commit_sha).slice(0, 7)}`;
+    }
+    if (enrichment.type === EnrichmentType.EDIT) {
+      return `edit_session ${String(d.id).slice(0, 8)}`;
+    }
+    return enrichment.type;
+  }
+
   private isDiffEnrichment(enrichment: Enrichment): boolean {
     return isEnrichmentDiff(enrichment.type as EnrichmentType);
   }
 
-  /**
-   * Sort enrichments by priority (pr_diff -> commit -> edit)
-   */
   private sortEnrichmentsByPriority(enrichments: Enrichment[]): Enrichment[] {
     const priorityOrder = this.options.enrichmentOrder || [
       EnrichmentType.PR,
@@ -371,14 +343,9 @@ export class VirtualContentBuilder {
     ];
 
     return [...enrichments].sort((a, b) => {
-      const aPriority = priorityOrder.indexOf(a.type);
-      const bPriority = priorityOrder.indexOf(b.type);
-
-      // If not in priority list, put at end
-      const aIndex = aPriority === -1 ? 999 : aPriority;
-      const bIndex = bPriority === -1 ? 999 : bPriority;
-
-      return aIndex - bIndex;
+      const aIndex = priorityOrder.indexOf(a.type);
+      const bIndex = priorityOrder.indexOf(b.type);
+      return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
     });
   }
 }

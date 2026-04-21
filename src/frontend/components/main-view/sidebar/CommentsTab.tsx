@@ -61,8 +61,7 @@ export function CommentsTab({
         setExpandedThreads(prev => new Set(prev).add(String(matchingComment.id)));
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedLines]);
+  }, [selectedLines, lineRootComments]);
 
   const handleSubmitComment = async () => {
     if (!newCommentText.trim() || !selectedLines) {
