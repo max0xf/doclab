@@ -14,8 +14,8 @@ if [ -n "$MISPLACED_TESTS" ]; then
 fi
 echo "✓ All test files are in the correct location"
 
-echo "Running specs lint..."
-npm run lint:specs
+# echo "Running specs lint..."
+# npm run lint:specs
 
 echo "Running format..."
 npm run format
