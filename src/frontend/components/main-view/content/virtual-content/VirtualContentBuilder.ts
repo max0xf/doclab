@@ -37,8 +37,13 @@ export class VirtualContentBuilder {
   }
 
   build(): LayeredVirtualContent {
-    const diffEnrichments = this.enrichments.filter(e => this.isDiffEnrichment(e));
-    const referenceEnrichments = this.enrichments.filter(e => !this.isDiffEnrichment(e));
+    // Merge multiple EDIT enrichments from the same session into one before building layers.
+    // At most one edit session exists per file; splitting by hunk is an implementation detail
+    // of FileViewer that the builder collapses back here.
+    const processedEnrichments = this.mergeEditEnrichments(this.enrichments);
+
+    const diffEnrichments = processedEnrichments.filter(e => this.isDiffEnrichment(e));
+    const referenceEnrichments = processedEnrichments.filter(e => !this.isDiffEnrichment(e));
     const sorted = this.sortEnrichmentsByPriority(diffEnrichments);
 
     console.log(
@@ -63,7 +68,7 @@ export class VirtualContentBuilder {
     this.applyReferenceEnrichments(finalLines, allReferenceEnrichments);
 
     const enrichmentsByType = new Map<string, Enrichment[]>();
-    this.enrichments.forEach(e => {
+    processedEnrichments.forEach(e => {
       if (!enrichmentsByType.has(e.type)) {
         enrichmentsByType.set(e.type, []);
       }
@@ -131,11 +136,10 @@ export class VirtualContentBuilder {
     }
 
     // Pre-scan: decide per hunk whether to apply or generate a conflict enrichment.
-    // This must be done before iterating lines so we don't partially claim ranges.
-    const hunksToApply = new Set<string>();
+    // Collect approved hunks as objects (not just keys) so we can sort and walk them.
+    const approvedHunks: any[] = [];
 
     for (const hunk of diffHunks) {
-      const hunkKey = `${hunk.old_start}-${hunk.old_count}`;
       const rangeEnd = hunk.old_start + Math.max(hunk.old_count - 1, 0);
       const conflicting = this.checkHunkConflict(hunk);
 
@@ -148,49 +152,115 @@ export class VirtualContentBuilder {
         this.generatedConflicts.push(this.createConflictEnrichment(conflicting, enrichment, hunk));
       } else {
         this.claimHunkRange(hunk, enrichment);
-        hunksToApply.add(hunkKey);
+        approvedHunks.push(hunk);
         console.log(
           `[VirtualContent] Layer ${layerIndex} — ${label} hunk @${hunk.old_start}-${rangeEnd}: applying`
         );
       }
     }
 
-    // Build the new layer, inserting diff lines only for non-conflicting hunks.
+    // Sort approved hunks by their position in the original file.
+    approvedHunks.sort((a, b) => a.old_start - b.old_start);
+
+    // Build the new layer by walking prevLayer lines and hunk lines together.
+    // This correctly handles context lines, deletions and additions in order.
     const newLines: VirtualLine[] = [];
-    const processedHunks = new Set<string>();
     let virtualLineNum = 1;
+    let prevIdx = 0; // cursor into previousLayer.lines
 
-    previousLayer.lines.forEach(prevLine => {
-      const matchingHunk = diffHunks.find((hunk: any) => {
-        const hunkKey = `${hunk.old_start}-${hunk.old_count}`;
-        return (
-          hunk.old_start === prevLine.lineNumber &&
-          !processedHunks.has(hunkKey) &&
-          hunksToApply.has(hunkKey)
-        );
-      });
-
-      if (matchingHunk) {
-        const hunkKey = `${matchingHunk.old_start}-${matchingHunk.old_count}`;
-        processedHunks.add(hunkKey);
-        const diffLines = this.processDiffHunk(
-          matchingHunk,
-          enrichment,
-          layerIndex,
-          prevLine.lineNumber
-        );
-        diffLines.forEach(diffLine => {
-          newLines.push({ ...diffLine, virtualLineNumber: virtualLineNum++ });
-        });
-      } else {
+    for (const hunk of approvedHunks) {
+      // 1. Copy all prevLayer lines that come before this hunk's original range.
+      //    Stop at the first ORIGINAL line at or after old_start; non-original
+      //    lines (insertions from earlier enrichments) are also copied here since
+      //    conflict detection guarantees they are outside this hunk's range.
+      while (prevIdx < previousLayer.lines.length) {
+        const pl = previousLayer.lines[prevIdx];
+        if (pl.isOriginalLine && pl.lineNumber >= hunk.old_start) {
+          break;
+        }
         newLines.push({
-          ...prevLine,
+          ...pl,
           layerIndex,
           virtualLineNumber: virtualLineNum++,
-          previousLayerLine: prevLine.virtualLineNumber,
+          previousLayerLine: pl.virtualLineNumber,
         });
+        prevIdx++;
       }
-    });
+
+      // 2. Walk hunk lines, synchronising with original lines in prevLayer.
+      //    ' ' (context)  → emit the matching original line from prevLayer
+      //    '-' (deletion) → emit a deletion VirtualLine, skip the original
+      //    '+' (addition) → emit an addition VirtualLine, don't advance prevIdx
+      let hunkOrigLine = hunk.old_start;
+      let isFirstDiffLine = true;
+
+      for (const hunkLine of hunk.lines as string[]) {
+        const prefix = hunkLine[0];
+        const content = hunkLine.slice(1);
+
+        if (prefix === ' ') {
+          // Context: emit the original prevLayer line as-is.
+          if (prevIdx < previousLayer.lines.length) {
+            const pl = previousLayer.lines[prevIdx];
+            newLines.push({
+              ...pl,
+              layerIndex,
+              virtualLineNumber: virtualLineNum++,
+              previousLayerLine: pl.virtualLineNumber,
+            });
+            prevIdx++;
+          }
+          hunkOrigLine++;
+        } else if (prefix === '-') {
+          // Deletion: emit a diff line, then skip past the original in prevLayer.
+          newLines.push({
+            lineNumber: hunkOrigLine,
+            virtualLineNumber: virtualLineNum++,
+            content,
+            enrichments: [],
+            sourceEnrichment: enrichment,
+            isOriginalLine: false,
+            isInsertedLine: true,
+            diffType: DiffType.DELETION,
+            isFirstInDiffGroup: isFirstDiffLine,
+            layerIndex,
+            ...this.getEnrichmentMetadata(enrichment),
+          });
+          isFirstDiffLine = false;
+          prevIdx++; // consume the original line that is being deleted
+          hunkOrigLine++;
+        } else if (prefix === '+') {
+          // Addition: emit a diff line; the original file position doesn't advance.
+          newLines.push({
+            lineNumber: hunkOrigLine,
+            virtualLineNumber: virtualLineNum++,
+            content,
+            enrichments: [],
+            sourceEnrichment: enrichment,
+            isOriginalLine: false,
+            isInsertedLine: true,
+            diffType: DiffType.ADDITION,
+            isFirstInDiffGroup: isFirstDiffLine,
+            layerIndex,
+            ...this.getEnrichmentMetadata(enrichment),
+          });
+          isFirstDiffLine = false;
+          // prevIdx and hunkOrigLine intentionally not advanced for additions
+        }
+      }
+    }
+
+    // 3. Copy all remaining prevLayer lines after the last hunk.
+    while (prevIdx < previousLayer.lines.length) {
+      const pl = previousLayer.lines[prevIdx];
+      newLines.push({
+        ...pl,
+        layerIndex,
+        virtualLineNumber: virtualLineNum++,
+        previousLayerLine: pl.virtualLineNumber,
+      });
+      prevIdx++;
+    }
 
     const inserted = newLines.filter(l => l.isInsertedLine && l.layerIndex === layerIndex).length;
     console.log(
@@ -198,56 +268,6 @@ export class VirtualContentBuilder {
     );
 
     return { layerIndex, enrichment, lines: newLines };
-  }
-
-  private processDiffHunk(
-    hunk: any,
-    enrichment: Enrichment,
-    layerIndex: number,
-    originalLineNumber: number
-  ): VirtualLine[] {
-    const lines: VirtualLine[] = [];
-    let isFirstDiffLine = true;
-
-    hunk.lines.forEach((hunkLine: string) => {
-      const prefix = hunkLine[0];
-      const content = hunkLine.slice(1);
-
-      if (prefix === '-') {
-        lines.push({
-          lineNumber: originalLineNumber,
-          virtualLineNumber: 0,
-          content,
-          enrichments: [],
-          sourceEnrichment: enrichment,
-          isOriginalLine: false,
-          isInsertedLine: true,
-          diffType: DiffType.DELETION,
-          isFirstInDiffGroup: isFirstDiffLine,
-          layerIndex,
-          ...this.getEnrichmentMetadata(enrichment),
-        });
-        isFirstDiffLine = false;
-      } else if (prefix === '+') {
-        lines.push({
-          lineNumber: originalLineNumber,
-          virtualLineNumber: 0,
-          content,
-          enrichments: [],
-          sourceEnrichment: enrichment,
-          isOriginalLine: false,
-          isInsertedLine: true,
-          diffType: DiffType.ADDITION,
-          isFirstInDiffGroup: isFirstDiffLine,
-          layerIndex,
-          ...this.getEnrichmentMetadata(enrichment),
-        });
-        isFirstDiffLine = false;
-      }
-      // Context lines (' ') are already present in the previous layer — skip them.
-    });
-
-    return lines;
   }
 
   private getEnrichmentMetadata(enrichment: Enrichment): Partial<VirtualLine> {
@@ -333,6 +353,47 @@ export class VirtualContentBuilder {
 
   private isDiffEnrichment(enrichment: Enrichment): boolean {
     return isEnrichmentDiff(enrichment.type as EnrichmentType);
+  }
+
+  private mergeEditEnrichments(enrichments: Enrichment[]): Enrichment[] {
+    const editEnrichments = enrichments.filter(e => e.type === EnrichmentType.EDIT);
+    if (editEnrichments.length <= 1) {
+      return enrichments;
+    }
+
+    const nonEditEnrichments = enrichments.filter(e => e.type !== EnrichmentType.EDIT);
+    const bySessionId = new Map<string, Enrichment[]>();
+
+    for (const e of editEnrichments) {
+      const sessionId = (e.data as any).id ?? e.id;
+      if (!bySessionId.has(sessionId)) {
+        bySessionId.set(sessionId, []);
+      }
+      bySessionId.get(sessionId)!.push(e);
+    }
+
+    const mergedEdits: Enrichment[] = [];
+    for (const group of bySessionId.values()) {
+      if (group.length === 1) {
+        mergedEdits.push(group[0]);
+        continue;
+      }
+      const allHunks = group
+        .flatMap(e => {
+          const data = e.data as any;
+          return data.current_hunk ? [data.current_hunk] : data.diff_hunks || [];
+        })
+        .sort((a, b) => a.old_start - b.old_start);
+
+      mergedEdits.push({
+        ...group[0],
+        lineStart: Math.min(...group.map(e => e.lineStart)),
+        lineEnd: Math.max(...group.map(e => e.lineEnd)),
+        data: { ...group[0].data, diff_hunks: allHunks, current_hunk: undefined },
+      });
+    }
+
+    return [...nonEditEnrichments, ...mergedEdits];
   }
 
   private sortEnrichmentsByPriority(enrichments: Enrichment[]): Enrichment[] {

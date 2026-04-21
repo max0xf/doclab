@@ -1,5 +1,6 @@
-import React from 'react';
-import { LayeredVirtualContent, VirtualLine, DiffType } from '../virtual-content/types';
+import React, { useState } from 'react';
+import { Enrichment, LayeredVirtualContent, VirtualLine, DiffType } from '../virtual-content/types';
+import { ConflictDetailsDialog } from './ConflictDetailsDialog';
 
 interface PlainTextContentRendererProps {
   virtualContent: LayeredVirtualContent;
@@ -12,6 +13,11 @@ export const PlainTextContentRenderer: React.FC<PlainTextContentRendererProps> =
   onLineClick,
   onEnrichmentClick,
 }) => {
+  const [conflictDialog, setConflictDialog] = useState<{
+    conflicts: Enrichment[];
+    initialIndex: number;
+  } | null>(null);
+
   const { finalLines } = virtualContent;
 
   const countCommentsRecursively = (comments: any[]): number =>
@@ -21,7 +27,7 @@ export const PlainTextContentRenderer: React.FC<PlainTextContentRendererProps> =
       0
     );
 
-  const conflictTitle = (enrichment: any): string => {
+  const conflictBadgeText = (enrichment: any): string => {
     const { firstEnrichment, secondEnrichment } = enrichment.data || {};
     const label = (e: any) => {
       if (!e) {
@@ -38,7 +44,7 @@ export const PlainTextContentRenderer: React.FC<PlainTextContentRendererProps> =
       }
       return e.type;
     };
-    return `Conflict: ${label(firstEnrichment)} vs ${label(secondEnrichment)}`;
+    return `${label(firstEnrichment)} vs ${label(secondEnrichment)}`;
   };
 
   const renderLine = (vLine: VirtualLine) => {
@@ -114,24 +120,24 @@ export const PlainTextContentRenderer: React.FC<PlainTextContentRendererProps> =
                 </div>
               )}
 
-              {/* Conflict badge — generated when hunks from two enrichments overlap */}
-              {conflictEnrichments.length > 0 && (
+              {/* Conflict badges — one per conflict, showing which enrichments clash */}
+              {conflictEnrichments.map((ce, i) => (
                 <div
-                  className="px-2 py-0.5 rounded text-xs font-semibold cursor-pointer"
+                  key={ce.id}
+                  className="px-2 py-0.5 rounded text-xs font-semibold cursor-pointer whitespace-nowrap"
                   style={{
                     backgroundColor: '#fef2f2',
                     color: '#dc2626',
                     border: '1px solid #ef4444',
                   }}
-                  title={conflictTitle(conflictEnrichments[0])}
                   onClick={e => {
                     e.stopPropagation();
-                    onEnrichmentClick?.(conflictEnrichments[0]);
+                    setConflictDialog({ conflicts: conflictEnrichments, initialIndex: i });
                   }}
                 >
-                  ⚠️ Conflict
+                  ⚠️ {conflictBadgeText(ce)}
                 </div>
-              )}
+              ))}
 
               {/* PR diff badge */}
               {showPRBadge && (
@@ -181,5 +187,16 @@ export const PlainTextContentRenderer: React.FC<PlainTextContentRendererProps> =
     );
   };
 
-  return <div className="font-mono text-sm">{finalLines.map(renderLine)}</div>;
+  return (
+    <>
+      <div className="font-mono text-sm">{finalLines.map(renderLine)}</div>
+      {conflictDialog && (
+        <ConflictDetailsDialog
+          conflicts={conflictDialog.conflicts}
+          initialIndex={conflictDialog.initialIndex}
+          onClose={() => setConflictDialog(null)}
+        />
+      )}
+    </>
+  );
 };
