@@ -3,34 +3,33 @@
 ## 🔴 HIGH PRIORITY - PoC Use Cases
 
 ### 1. Edit of Rendered File with Commit/PR Creation
-**Status:** Partial - Basic edit exists, not fully tested or supported
+**Status:** Partial - Edit mode works, Git commit/PR creation not implemented
 
 **Completed:**
 - [x] VirtualContent architecture foundation
 - [x] User changes tracking (pending changes stored)
 - [x] Diff generation for changes
+- [x] Edit mode toggle UI (Edit button in FileViewerHeader)
+- [x] Plain text editing for all file types
+- [x] Save dialog with description prompt
+- [x] Unsaved changes warning on cancel
+- [x] Approve/reject backend actions (views_user_changes.py:67-90)
+- [x] Frontend API for user changes (userChangesApi.ts)
 
 **Remaining:**
-- [ ] Edit mode completion
-  - Plain text editing works but not tested thoroughly
-  - Visual/rendered mode editing not supported
-  - Need: Edit mode for all file types (Markdown, YAML, XML, etc.)
-  - Need: Visual editor for Markdown (WYSIWYG)
-  - Need: Comprehensive testing of edit functionality
-- [ ] Edit mode toggle UI
-  - Add Edit/Preview toggle button
-  - Handle unsaved changes warnings
-  - Auto-save or save prompt
+- [ ] Visual/WYSIWYG editor for Markdown
+  - Currently only plain text editing
+  - Need: Rich text editor (e.g., TipTap, ProseMirror)
 - [ ] Git commit creation from approved changes
-  - File: `src/backend/src/wiki/views_user_changes.py:104`
-  - Need: Implement actual Git commit via provider
+  - File: `src/backend/src/wiki/views_user_changes.py:100-108`
+  - Currently just marks as 'committed' without actual Git commit
+  - Need: Call BitbucketServerProvider.create_commit()
 - [ ] PR creation workflow
+  - Backend: Add `create_pull_request()` to BitbucketServerProvider (currently raises NotImplementedError at line 516)
   - Backend: Add `create_pr` action to UserChangeViewSet
   - Frontend: Add "Create PR" button in diff view
-  - Integration: Call git provider's PR creation API
-- [ ] Approve/reject workflow completion
-  - Backend: Implement approve/reject actions
-  - Frontend: Connect approve/reject buttons to API
+- [ ] Connect frontend approve/reject buttons to backend API
+  - DiffViewer has Accept/Reject buttons but handlers just log to console
 
 ---
 
@@ -76,7 +75,7 @@
 ---
 
 ### 5. Custom Hierarchy for Repo with Human Readable Names
-**Status:** Partial - Space organization done, file mapping missing
+**Status:** Complete ✅
 
 **Completed:**
 - [x] Space-based organization
@@ -86,23 +85,19 @@
 - [x] Favorites and recent spaces
 - [x] Space shortcuts for quick navigation
 - [x] Hierarchical navigation in left menu
+- [x] FileMapping model with display_name, description, is_folder support
+- [x] CRUD API endpoints for file mappings (views_file_mapping.py)
+- [x] Name extraction from file content (first_h1, first_h2, title_frontmatter, filename)
+- [x] Folder rules with inheritance (apply_folder_rule, parent_rule)
+- [x] Bulk update mappings API
+- [x] Tree with mappings API (get_tree endpoint)
+- [x] Sync and refresh mappings APIs
+- [x] Frontend FileMappingConfigPanel and FileMappingConfiguration components
+- [x] Frontend fileMappingApi.ts service
+- [x] FileTree and SpaceTree integration with display names
 
 **Remaining:**
-- [ ] File path to human-readable name mapping
-  - Backend: Add FileMapping model (file_path → display_name, description)
-  - API: CRUD endpoints for file mappings
-  - UI: Show mapped names instead of raw file paths
-  - Example: `docs/api/rest.md` → "REST API Documentation"
-- [ ] Directory/folder custom names
-  - Map entire directories to readable names
-  - Example: `src/backend/` → "Backend Services"
-- [ ] Breadcrumb navigation with custom names
-  - Show mapped names in breadcrumbs
-  - Fallback to file path if no mapping exists
-- [ ] File mapping management UI
-  - Bulk import from CSV/JSON
-  - Inline editing in file browser
-  - Search and filter mappings
+- [ ] Breadcrumb navigation with custom names (currently shows file path)
 
 ---
 
@@ -180,22 +175,24 @@
 **Status:** Partial - Read operations complete, write operations pending
 
 **Bitbucket Server (Completed):**
-- [x] Repository listing
+- [x] Repository listing (with project hierarchy)
 - [x] Branch listing
 - [x] File content retrieval
-- [x] Directory listing
-- [x] PR diff fetching
-- [x] Authentication with tokens
+- [x] Directory listing (with nested path handling)
+- [x] PR diff fetching (with pagination support)
+- [x] PR files listing
+- [x] Authentication with tokens and custom headers
+- [x] Response caching for authenticated users
+- [x] Commit history retrieval (list_commits at line 493)
 
 **Bitbucket Server (Remaining):**
 - [ ] Commit creation
-  - Implement `create_commit()` in BitbucketServerProvider
-  - File: `src/backend/src/git_provider/providers/bitbucket_server.py:285`
+  - `create_commit()` exists but raises NotImplementedError (line 514-516)
+  - Need: Implement Bitbucket Server file update API
 - [ ] PR creation
   - Add `create_pull_request()` method
   - Support title, description, source/target branches
 - [ ] PR update/merge operations
-- [ ] Commit history retrieval
 
 **GitHub (Future):**
 - [ ] GitHub provider implementation
@@ -213,17 +210,21 @@
 ## 🟢 LOW PRIORITY - Optional Features
 
 ### 9. SSO/OIDC Authentication (6-8 hours)
-**Status:** Stub - Returns 501
+**Status:** Stub - Returns 501 Not Implemented
 
 **Backend Tasks:**
-- [ ] Implement `sso_login()` view
-  - File: `src/backend/src/users/auth_views.py:136`
+- [x] SSO endpoint stubs created (auth_views.py:132-163)
+- [x] OpenAPI schema documentation for SSO endpoints
+- [ ] Implement `sso_login_view()` logic
+  - File: `src/backend/src/users/auth_views.py:132-140`
+  - Currently returns 501 with "SSO not yet implemented"
   - Use: Authlib OIDC client
   - Generate authorization URL
   - Redirect to SSO provider
 
-- [ ] Implement `sso_callback()` view
-  - File: `src/backend/src/users/auth_views.py:159`
+- [ ] Implement `sso_callback_view()` logic
+  - File: `src/backend/src/users/auth_views.py:155-163`
+  - Currently returns 501 with "SSO not yet implemented"
   - Exchange authorization code for tokens
   - Validate ID token
   - Create/update user

@@ -2,6 +2,7 @@ import React from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { UserSettingsProvider } from './context/UserSettingsContext';
+import { DraftChangeProvider } from './context/DraftChangeContext';
 import Layout from './components/Layout';
 import LoginPage from './components/LoginPage';
 import ViewLoadingFallback from './components/ViewLoadingFallback';
@@ -79,7 +80,9 @@ export default function App() {
     <ThemeProvider>
       <AuthProvider>
         <UserSettingsProvider>
-          <AppContent />
+          <DraftChangeProvider>
+            <AppContent />
+          </DraftChangeProvider>
         </UserSettingsProvider>
       </AuthProvider>
     </ThemeProvider>

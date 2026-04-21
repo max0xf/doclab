@@ -1,27 +1,40 @@
 import React, { useState, useEffect } from 'react';
-import { X, MessageSquare, FileEdit, GitBranch, AlertCircle, Copy, Check } from 'lucide-react';
+import {
+  X,
+  MessageSquare,
+  FileEdit,
+  GitBranch,
+  AlertCircle,
+  Copy,
+  Check,
+  Edit3,
+} from 'lucide-react';
 import DiffViewer from './DiffViewer';
 import { CommentsTab } from './CommentsTab';
 import { PRBanner } from './FileViewer/PRBanner';
+import { ChangesTab } from './ChangesTab';
 import type { EnrichmentsResponse } from '../services/enrichmentApi';
 
 interface EnrichmentPanelProps {
   enrichments: EnrichmentsResponse;
   fileName: string;
+  filePath?: string;
   sourceUri: string;
   selectedLines: { start: number; end: number } | null;
-  activeTab?: 'all' | 'comments' | 'diffs' | 'prs' | 'local';
+  activeTab?: 'all' | 'comments' | 'diffs' | 'prs' | 'local' | 'changes';
   onClose: () => void;
   onAcceptDiff?: (diffId: string) => void;
   onRejectDiff?: (diffId: string) => void;
   onCommentsChange?: () => void;
+  onNavigateToFile?: (filePath: string) => void;
 }
 
-type EnrichmentTab = 'all' | 'comments' | 'diffs' | 'prs' | 'local';
+type EnrichmentTab = 'all' | 'comments' | 'diffs' | 'prs' | 'local' | 'changes';
 
 export default function EnrichmentPanel({
   enrichments,
   fileName,
+  filePath,
   sourceUri,
   selectedLines,
   activeTab: initialActiveTab = 'all',
@@ -29,9 +42,14 @@ export default function EnrichmentPanel({
   onAcceptDiff,
   onRejectDiff,
   onCommentsChange,
+  onNavigateToFile,
 }: EnrichmentPanelProps) {
   const [activeTab, setActiveTab] = useState<EnrichmentTab>(initialActiveTab);
   const [copied, setCopied] = useState(false);
+
+  // Count edit changes from enrichments
+  const editChangesCount = (enrichments.edit?.length || 0) + (enrichments.commit?.length || 0);
+  const hasUnsavedChanges = editChangesCount > 0;
 
   // Update activeTab when initialActiveTab prop changes (e.g., when user clicks a line)
   useEffect(() => {
@@ -47,7 +65,9 @@ export default function EnrichmentPanel({
         (enrichments.comments?.length || 0) +
         (enrichments.diff?.length || 0) +
         (enrichments.pr_diff?.length || 0) +
-        (enrichments.local_changes?.length || 0),
+        (enrichments.local_changes?.length || 0) +
+        (enrichments.edit?.length || 0) +
+        (enrichments.commit?.length || 0),
     },
     {
       id: 'comments',
@@ -73,11 +93,24 @@ export default function EnrichmentPanel({
       icon: <AlertCircle size={16} />,
       count: enrichments.local_changes?.length || 0,
     },
+    {
+      id: 'changes',
+      label: 'Changes',
+      icon: <Edit3 size={16} />,
+      count:
+        editChangesCount || (enrichments.edit?.length || 0) + (enrichments.commit?.length || 0),
+    },
   ];
 
   const shouldShowTab = (tab: EnrichmentTab) => {
     if (tab === 'all' || tab === 'comments') {
       return true; // Always show All and Comments tabs
+    }
+    // Always show Changes tab when there are pending changes or edit enrichments
+    const editEnrichmentsCount =
+      (enrichments.edit?.length || 0) + (enrichments.commit?.length || 0);
+    if (tab === 'changes' && (hasUnsavedChanges || editEnrichmentsCount > 0)) {
+      return true;
     }
     const tabData = tabs.find(t => t.id === tab);
     return (tabData?.count || 0) > 0;
@@ -196,6 +229,17 @@ export default function EnrichmentPanel({
             sourceUri={sourceUri}
             selectedLines={selectedLines}
             onCommentsChange={onCommentsChange}
+          />
+        )}
+
+        {/* Changes Tab */}
+        {activeTab === 'changes' && (
+          <ChangesTab
+            currentFilePath={filePath}
+            onNavigateToFile={onNavigateToFile}
+            editEnrichments={enrichments.edit}
+            commitEnrichments={enrichments.commit}
+            onRefresh={onCommentsChange}
           />
         )}
 

@@ -34,6 +34,11 @@ export default function EditSpaceModal({ isOpen, onClose, onSuccess, space }: Ed
     git_provider: space.git_provider || 'bitbucket_server',
     git_repository_url: getCurrentGitUrl(space),
     git_default_branch: space.git_default_branch || '',
+    // Edit fork configuration
+    edit_fork_project_key: space.edit_fork_project_key || '',
+    edit_fork_repo_slug: space.edit_fork_repo_slug || '',
+    edit_fork_ssh_url: space.edit_fork_ssh_url || '',
+    edit_fork_local_path: space.edit_fork_local_path || '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +52,10 @@ export default function EditSpaceModal({ isOpen, onClose, onSuccess, space }: Ed
       git_provider: space.git_provider || 'bitbucket_server',
       git_repository_url: getCurrentGitUrl(space),
       git_default_branch: space.git_default_branch || '',
+      edit_fork_project_key: space.edit_fork_project_key || '',
+      edit_fork_repo_slug: space.edit_fork_repo_slug || '',
+      edit_fork_ssh_url: space.edit_fork_ssh_url || '',
+      edit_fork_local_path: space.edit_fork_local_path || '',
     });
     setError(null);
   }, [space]);
@@ -64,6 +73,11 @@ export default function EditSpaceModal({ isOpen, onClose, onSuccess, space }: Ed
         git_provider: formData.git_provider,
         git_repository_url: formData.git_repository_url || undefined,
         git_default_branch: formData.git_default_branch,
+        // Edit fork configuration
+        edit_fork_project_key: formData.edit_fork_project_key || undefined,
+        edit_fork_repo_slug: formData.edit_fork_repo_slug || undefined,
+        edit_fork_ssh_url: formData.edit_fork_ssh_url || undefined,
+        edit_fork_local_path: formData.edit_fork_local_path || undefined,
       });
 
       onSuccess();
@@ -307,6 +321,151 @@ export default function EditSpaceModal({ isOpen, onClose, onSuccess, space }: Ed
                 Leave empty to use the repository's default branch
               </p>
             </div>
+          </div>
+
+          {/* Edit Fork Configuration */}
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+                Edit Workflow (Optional)
+              </h3>
+              <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+                Configure a fork repository to enable in-browser editing and PR creation
+              </p>
+            </div>
+
+            <div>
+              <label
+                className="block text-sm font-medium mb-2"
+                style={{ color: 'var(--text-primary)' }}
+              >
+                Fork Project Key
+              </label>
+              <input
+                type="text"
+                value={formData.edit_fork_project_key}
+                onChange={e => setFormData({ ...formData, edit_fork_project_key: e.target.value })}
+                placeholder="e.g., ~username or PROJECT"
+                className="w-full px-3 py-2 rounded-lg border"
+                style={{
+                  backgroundColor: 'var(--input-bg)',
+                  borderColor: 'var(--input-border)',
+                  color: 'var(--text-primary)',
+                }}
+              />
+              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                Project key where the fork lives (use ~username for personal forks)
+              </p>
+            </div>
+
+            <div>
+              <label
+                className="block text-sm font-medium mb-2"
+                style={{ color: 'var(--text-primary)' }}
+              >
+                Fork Repository Slug
+              </label>
+              <input
+                type="text"
+                value={formData.edit_fork_repo_slug}
+                onChange={e => setFormData({ ...formData, edit_fork_repo_slug: e.target.value })}
+                placeholder="e.g., cyber-repo"
+                className="w-full px-3 py-2 rounded-lg border"
+                style={{
+                  backgroundColor: 'var(--input-bg)',
+                  borderColor: 'var(--input-border)',
+                  color: 'var(--text-primary)',
+                }}
+              />
+            </div>
+
+            <div>
+              <label
+                className="block text-sm font-medium mb-2"
+                style={{ color: 'var(--text-primary)' }}
+              >
+                Fork SSH URL
+              </label>
+              <input
+                type="text"
+                value={formData.edit_fork_ssh_url}
+                onChange={e => setFormData({ ...formData, edit_fork_ssh_url: e.target.value })}
+                placeholder="ssh://git@git.example.com/~username/repo.git"
+                className="w-full px-3 py-2 rounded-lg border"
+                style={{
+                  backgroundColor: 'var(--input-bg)',
+                  borderColor: 'var(--input-border)',
+                  color: 'var(--text-primary)',
+                }}
+              />
+              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                SSH clone URL for the fork (DocLab server needs SSH access)
+              </p>
+            </div>
+
+            <div>
+              <label
+                className="block text-sm font-medium mb-2"
+                style={{ color: 'var(--text-primary)' }}
+              >
+                Local Fork Path (Development)
+              </label>
+              <input
+                type="text"
+                value={formData.edit_fork_local_path}
+                onChange={e => setFormData({ ...formData, edit_fork_local_path: e.target.value })}
+                placeholder="/path/to/local/fork/repo"
+                className="w-full px-3 py-2 rounded-lg border"
+                style={{
+                  backgroundColor: 'var(--input-bg)',
+                  borderColor: 'var(--input-border)',
+                  color: 'var(--text-primary)',
+                }}
+              />
+              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                Local path to pre-cloned fork repo (for development, overrides SSH URL)
+              </p>
+            </div>
+
+            {/* Status indicator */}
+            {formData.edit_fork_local_path ? (
+              <div
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm"
+                style={{
+                  backgroundColor: 'var(--success-bg, #dcfce7)',
+                  color: 'var(--success, #16a34a)',
+                }}
+              >
+                <span>✓</span>
+                <span>Edit workflow enabled (using local repo)</span>
+              </div>
+            ) : formData.edit_fork_project_key &&
+              formData.edit_fork_repo_slug &&
+              formData.edit_fork_ssh_url ? (
+              <div
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm"
+                style={{
+                  backgroundColor: 'var(--success-bg, #dcfce7)',
+                  color: 'var(--success, #16a34a)',
+                }}
+              >
+                <span>✓</span>
+                <span>Edit workflow will be enabled for this space</span>
+              </div>
+            ) : formData.edit_fork_project_key ||
+              formData.edit_fork_repo_slug ||
+              formData.edit_fork_ssh_url ? (
+              <div
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm"
+                style={{
+                  backgroundColor: 'var(--warning-bg, #fef3c7)',
+                  color: 'var(--warning, #d97706)',
+                }}
+              >
+                <span>⚠</span>
+                <span>Fill all three fields to enable edit workflow</span>
+              </div>
+            ) : null}
           </div>
 
           {/* Actions */}

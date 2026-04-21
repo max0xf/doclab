@@ -27,7 +27,7 @@ export const VIEW_MODE_OPTIONS: ViewModeOption[] = [
 
 export interface Enrichment {
   id: string;
-  type: 'comment' | 'diff' | 'pr_diff' | 'local_change';
+  type: 'comment' | 'diff' | 'pr_diff' | 'local_change' | 'edit_session' | 'commit';
   lineStart: number;
   lineEnd: number;
   data: any;
@@ -35,7 +35,9 @@ export interface Enrichment {
 
 export interface ContentWidgetProps {
   fileName: string;
+  filePath?: string;
   content: string;
+  originalContent?: string; // Original content before user changes
   enrichments: Enrichment[];
   isEditMode: boolean;
   onContentChange?: (newContent: string) => void;
@@ -52,5 +54,19 @@ export interface VirtualLine {
   diffType?: 'addition' | 'deletion'; // Type of diff change
   prNumber?: number; // PR number for diff lines
   prTitle?: string; // PR title for diff lines
+  commitSha?: string; // Commit SHA for commit diff lines
+  editId?: string; // Edit ID for edit diff lines
   isFirstInDiffGroup?: boolean; // True if this is the first line in a group of additions or deletions
+  isUserChange?: boolean; // True if this line was modified by the user
+  userChangeType?: 'added' | 'modified' | 'deleted'; // Type of user change
+  isFirstInUserChangeGroup?: boolean; // True if this is the first line in a group of user changes
+  hasConflict?: boolean; // True if this line has conflicting changes (edit vs commit)
+  isFirstInConflictGroup?: boolean; // True if this is the first line in a conflict group
+}
+
+export interface ConflictInfo {
+  lineNumber: number;
+  uncommittedContent: string; // Content from edit enrichment
+  committedContent: string; // Content from commit enrichment
+  originalContent: string; // Original content before any changes
 }

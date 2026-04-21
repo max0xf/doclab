@@ -78,6 +78,11 @@ export interface UpdateSpaceRequest {
   git_provider?: string;
   git_repository_url?: string;
   git_default_branch?: string;
+  // Edit fork configuration
+  edit_fork_project_key?: string;
+  edit_fork_repo_slug?: string;
+  edit_fork_ssh_url?: string;
+  edit_fork_local_path?: string;
 }
 
 /**

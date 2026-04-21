@@ -6,6 +6,7 @@ import { apiClient } from '../services/apiClient';
 import { FileViewer } from './FileViewer';
 import { fileMappingApi, type FileMapping } from '../services/fileMappingApi';
 import SmartLoadingIndicator from './SmartLoadingIndicator';
+import { useDraftChanges } from '../context/DraftChangeContext';
 
 interface MainViewProps {
   selectedSpace: Space | null;
@@ -674,6 +675,7 @@ function FileContentView({
   const [enrichments, setEnrichments] = useState<EnrichmentsResponse>({});
   const [mappings, setMappings] = useState<Map<string, FileMapping>>(new Map());
   const [breadcrumbPath, setBreadcrumbPath] = useState<string>('');
+  const { saveChange } = useDraftChanges();
 
   // Load file mappings
   useEffect(() => {
@@ -749,20 +751,12 @@ function FileContentView({
     console.log('[FileContentView] Saving changes:', { file: file.path, description });
 
     try {
-      // Create pending change via UserChanges API
-      const response = await apiClient.request('/api/wiki/v1/user-changes/', {
-        method: 'POST',
-        body: JSON.stringify({
-          space_id: space.id,
-          file_path: file.path,
-          content: newContent,
-          description,
-          status: 'pending',
-        }),
-      });
+      // Save as draft change
+      await saveChange(space.id, file.path, fileContent, newContent, 'modify', description);
+      console.log('[FileContentView] Change saved as draft');
 
-      console.log('[FileContentView] Change submitted:', response);
-      alert('Changes submitted for approval!');
+      // Reload enrichments to show the new draft
+      await loadEnrichments();
     } catch (error) {
       console.error('[FileContentView] Save failed:', error);
       throw error;

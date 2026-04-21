@@ -83,11 +83,59 @@ export interface PREnrichment extends Enrichment {
   diff_hunks?: PRDiffHunk[];
 }
 
+/**
+ * Edit enrichment - user's edits stored in DocLab.
+ * Not yet committed to git.
+ * Actions: stage, discard
+ */
+export interface EditEnrichment extends Enrichment {
+  type: 'edit';
+  id: string;
+  space_id: string;
+  space_slug: string;
+  file_path: string;
+  change_type: 'modify' | 'create' | 'delete';
+  description: string;
+  user: string;
+  user_full_name: string;
+  created_at: string;
+  updated_at: string;
+  diff_hunks?: PRDiffHunk[];
+  actions: ('commit' | 'discard')[];
+}
+
+/**
+ * Commit enrichment - commits in user's fork branch not yet in main repo.
+ * Actions: unstage, create_pr (or view_pr if PR already exists)
+ */
+export interface CommitEnrichment extends Enrichment {
+  type: 'commit';
+  id: string;
+  space_id: string;
+  space_slug: string;
+  file_path: string;
+  branch_name: string;
+  base_branch: string;
+  commit_sha: string | null;
+  user: string;
+  user_full_name: string;
+  created_at: string;
+  updated_at: string;
+  diff_hunks?: PRDiffHunk[];
+  additions?: number;
+  deletions?: number;
+  pr_id?: number | null;
+  pr_url?: string | null;
+  actions: ('unstage' | 'create_pr' | 'view_pr')[];
+}
+
 export interface EnrichmentsResponse {
   comments?: CommentEnrichment[];
   diff?: DiffEnrichment[];
   local_changes?: LocalChangeEnrichment[];
   pr_diff?: PREnrichment[];
+  edit?: EditEnrichment[];
+  commit?: CommitEnrichment[];
 }
 
 export interface EnrichmentTypesResponse {

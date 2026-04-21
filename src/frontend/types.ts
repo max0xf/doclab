@@ -116,6 +116,13 @@ export interface Space {
   git_repository_name: string | null;
   git_default_branch: string;
 
+  // Edit Fork Configuration
+  edit_fork_project_key: string | null;
+  edit_fork_repo_slug: string | null;
+  edit_fork_ssh_url: string | null;
+  edit_fork_local_path: string | null;
+  edit_enabled: boolean;
+
   // File Mapping Configuration
   filters: string[];
   default_display_name_source: string;
