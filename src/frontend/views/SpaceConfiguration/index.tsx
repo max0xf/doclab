@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Edit2, Trash2, Plus, Search, Star, FolderTree } from 'lucide-react';
 import spaceApi from '../../services/spaceApi';
-import CreateSpaceModal from '../../components/CreateSpaceModal';
-import EditSpaceModal from '../../components/EditSpaceModal';
-import FileMappingConfiguration from '../../components/FileMappingConfiguration';
+import CreateSpaceModal from '../../components/common/CreateSpaceModal';
+import EditSpaceModal from '../../components/spaces/EditSpaceModal';
+import FileMappingConfiguration from '../../components/spaces/file-mapping/FileMappingConfiguration';
 import type { Space, UserSpacePreference } from '../../types';
 
 export default function SpaceConfiguration() {

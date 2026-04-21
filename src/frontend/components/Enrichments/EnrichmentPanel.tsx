@@ -1,223 +1,392 @@
-/**
- * EnrichmentPanel Component
- *
- * Displays enrichment details and available actions
- */
-
-import React, { useState } from 'react';
-import * as LucideIcons from 'lucide-react';
+import React, { useState, useEffect } from 'react';
 import {
-  Enrichment,
-  executeEnrichmentAction,
-  getEnrichmentActions,
-  EnrichmentAction,
-} from '../../services/enrichmentProviderApi';
+  X,
+  MessageSquare,
+  FileEdit,
+  GitBranch,
+  AlertCircle,
+  Copy,
+  Check,
+  Edit3,
+} from 'lucide-react';
+import DiffViewer from '../main-view/sidebar/DiffViewer';
+import { CommentsTab } from '../main-view/sidebar/CommentsTab';
+import { PRBanner } from '../main-view/content/PRBanner';
+import { ChangesTab } from '../main-view/sidebar/ChangesTab';
+import type { EnrichmentsResponse } from '../../services/enrichmentApi';
 
 interface EnrichmentPanelProps {
-  enrichment: Enrichment;
-  onActionExecuted?: (action: string, result: any) => void;
-  onClose?: () => void;
+  enrichments: EnrichmentsResponse;
+  fileName: string;
+  filePath?: string;
+  sourceUri: string;
+  selectedLines: { start: number; end: number } | null;
+  activeTab?: EnrichmentTab;
+  onClose: () => void;
+  onAcceptDiff?: (diffId: string) => void;
+  onRejectDiff?: (diffId: string) => void;
+  onCommentsChange?: () => void;
+  onNavigateToFile?: (filePath: string) => void;
 }
 
-export const EnrichmentPanel: React.FC<EnrichmentPanelProps> = ({
-  enrichment,
-  onActionExecuted,
+export enum EnrichmentTab {
+  ALL = 'all',
+  COMMENTS = 'comments',
+  DIFFS = 'diffs',
+  PRS = 'prs',
+  LOCAL = 'local',
+  CHANGES = 'changes',
+}
+
+export default function EnrichmentPanel({
+  enrichments,
+  fileName,
+  filePath,
+  sourceUri,
+  selectedLines,
+  activeTab: initialActiveTab = EnrichmentTab.ALL,
   onClose,
-}) => {
-  const [actions, setActions] = useState<EnrichmentAction[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [actionInput, setActionInput] = useState<Record<string, any>>({});
-  const [selectedAction, setSelectedAction] = useState<string | null>(null);
+  onAcceptDiff,
+  onRejectDiff,
+  onCommentsChange,
+  onNavigateToFile,
+}: EnrichmentPanelProps) {
+  const [activeTab, setActiveTab] = useState<EnrichmentTab>(initialActiveTab);
+  const [copied, setCopied] = useState(false);
 
-  // Load actions on mount
-  React.useEffect(() => {
-    if (enrichment.actions.length > 0) {
-      getEnrichmentActions(enrichment.id).then(setActions).catch(console.error);
+  // Count edit changes from enrichments
+  const editChangesCount = (enrichments.edit?.length || 0) + (enrichments.commit?.length || 0);
+  const hasUnsavedChanges = editChangesCount > 0;
+
+  // Update activeTab when initialActiveTab prop changes (e.g., when user clicks a line)
+  useEffect(() => {
+    setActiveTab(initialActiveTab);
+  }, [initialActiveTab]);
+
+  const tabs: Array<{ id: EnrichmentTab; label: string; icon: React.ReactNode; count: number }> = [
+    {
+      id: EnrichmentTab.ALL,
+      label: 'All',
+      icon: <AlertCircle size={16} />,
+      count:
+        (enrichments.comments?.length || 0) +
+        (enrichments.diff?.length || 0) +
+        (enrichments.pr_diff?.length || 0) +
+        (enrichments.local_changes?.length || 0) +
+        (enrichments.edit?.length || 0) +
+        (enrichments.commit?.length || 0),
+    },
+    {
+      id: EnrichmentTab.COMMENTS,
+      label: 'Comments',
+      icon: <MessageSquare size={16} />,
+      count: enrichments.comments?.length || 0,
+    },
+    {
+      id: EnrichmentTab.DIFFS,
+      label: 'Diffs',
+      icon: <FileEdit size={16} />,
+      count: enrichments.diff?.length || 0,
+    },
+    {
+      id: EnrichmentTab.PRS,
+      label: 'PRs',
+      icon: <GitBranch size={16} />,
+      count: enrichments.pr_diff?.length || 0,
+    },
+    {
+      id: EnrichmentTab.LOCAL,
+      label: 'Local',
+      icon: <AlertCircle size={16} />,
+      count: enrichments.local_changes?.length || 0,
+    },
+    {
+      id: EnrichmentTab.CHANGES,
+      label: 'Changes',
+      icon: <Edit3 size={16} />,
+      count:
+        editChangesCount || (enrichments.edit?.length || 0) + (enrichments.commit?.length || 0),
+    },
+  ];
+
+  const shouldShowTab = (tab: EnrichmentTab) => {
+    if (tab === EnrichmentTab.ALL || tab === EnrichmentTab.COMMENTS) {
+      return true; // Always show All and Comments tabs
     }
-  }, [enrichment.id, enrichment.actions]);
-
-  const handleExecuteAction = async (action: string) => {
-    setLoading(true);
-    try {
-      const params = actionInput[action] || {};
-      const result = await executeEnrichmentAction(enrichment.id, action, params);
-
-      if (result.success) {
-        onActionExecuted?.(action, result);
-        setSelectedAction(null);
-        setActionInput({});
-      } else {
-        alert(result.message || 'Action failed');
-      }
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Action failed');
-    } finally {
-      setLoading(false);
+    // Always show Changes tab when there are pending changes or edit enrichments
+    const editEnrichmentsCount =
+      (enrichments.edit?.length || 0) + (enrichments.commit?.length || 0);
+    if (tab === EnrichmentTab.CHANGES && (hasUnsavedChanges || editEnrichmentsCount > 0)) {
+      return true;
     }
-  };
-
-  const renderActionButton = (action: EnrichmentAction) => {
-    const IconComponent = action.icon
-      ? (LucideIcons as any)[
-          action.icon
-            .split('-')
-            .map((s: string) => s.charAt(0).toUpperCase() + s.slice(1))
-            .join('')
-        ]
-      : null;
-
-    return (
-      <button
-        key={action.action}
-        onClick={() => {
-          if (action.requires_input) {
-            setSelectedAction(action.action);
-          } else {
-            handleExecuteAction(action.action);
-          }
-        }}
-        disabled={loading}
-        className="flex items-center gap-2 px-3 py-2 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-      >
-        {IconComponent && <IconComponent size={16} />}
-        <span>{action.label}</span>
-      </button>
-    );
-  };
-
-  const renderActionInput = (action: EnrichmentAction) => {
-    if (!action.input_schema) {
-      return null;
-    }
-
-    const properties = action.input_schema.properties || {};
-
-    return (
-      <div className="mt-4 p-4 border border-gray-300 rounded">
-        <h4 className="font-medium mb-3">{action.label}</h4>
-
-        {Object.entries(properties).map(([key, schema]: [string, any]) => (
-          <div key={key} className="mb-3">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              {key.charAt(0).toUpperCase() + key.slice(1)}
-            </label>
-            {schema.type === 'string' && (
-              <textarea
-                value={actionInput[action.action]?.[key] || ''}
-                onChange={e =>
-                  setActionInput({
-                    ...actionInput,
-                    [action.action]: {
-                      ...actionInput[action.action],
-                      [key]: e.target.value,
-                    },
-                  })
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                rows={3}
-              />
-            )}
-          </div>
-        ))}
-
-        <div className="flex gap-2">
-          <button
-            onClick={() => handleExecuteAction(action.action)}
-            disabled={loading}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {loading ? 'Executing...' : 'Submit'}
-          </button>
-          <button
-            onClick={() => {
-              setSelectedAction(null);
-              setActionInput({});
-            }}
-            disabled={loading}
-            className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    );
+    const tabData = tabs.find(t => t.id === tab);
+    return (tabData?.count || 0) > 0;
   };
 
   return (
-    <div className="bg-white border border-gray-300 rounded-lg shadow-lg p-4 max-w-md">
+    <div
+      className="flex flex-col h-full"
+      style={{
+        backgroundColor: 'var(--bg-primary)',
+      }}
+    >
       {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-medium text-gray-500 uppercase">
-              {enrichment.type.replace('_', ' ')}
-            </span>
-            {enrichment.visual.label && (
-              <span className="text-xs px-2 py-0.5 rounded bg-gray-100">
-                {enrichment.visual.label}
-              </span>
-            )}
-          </div>
-          <div className="text-xs text-gray-500">
-            by {enrichment.created_by} • {new Date(enrichment.created_at).toLocaleDateString()}
-          </div>
-        </div>
-        {onClose && (
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
-            <LucideIcons.X size={20} />
-          </button>
-        )}
+      <div
+        className="flex items-center justify-between px-4 py-3 border-b"
+        style={{
+          backgroundColor: 'var(--bg-secondary)',
+          borderColor: 'var(--border-color)',
+        }}
+      >
+        <h3 className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+          Enrichments
+        </h3>
+        <button
+          onClick={onClose}
+          className="hover:opacity-80 transition-opacity"
+          style={{ color: 'var(--text-secondary)' }}
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      {/* Tabs */}
+      <div
+        className="flex border-b overflow-x-auto"
+        style={{
+          borderColor: 'var(--border-color)',
+        }}
+      >
+        {tabs
+          .filter(tab => shouldShowTab(tab.id))
+          .map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className="flex items-center gap-2 px-4 py-2 text-sm whitespace-nowrap transition-colors border-b-2"
+              style={{
+                color: activeTab === tab.id ? 'var(--text-primary)' : 'var(--text-secondary)',
+                borderColor: activeTab === tab.id ? '#0066cc' : 'transparent',
+                backgroundColor: activeTab === tab.id ? 'var(--bg-tertiary)' : 'transparent',
+              }}
+            >
+              {tab.icon}
+              {tab.label}
+              {tab.count > 0 && (
+                <span
+                  className="px-1.5 py-0.5 text-xs rounded"
+                  style={{
+                    backgroundColor: activeTab === tab.id ? '#0066cc' : 'var(--bg-tertiary)',
+                    color: activeTab === tab.id ? 'white' : 'var(--text-secondary)',
+                  }}
+                >
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
       </div>
 
       {/* Content */}
-      <div className="mb-4">
-        {enrichment.type === 'comment' && (
-          <div>
-            <p className="text-gray-800 whitespace-pre-wrap">{enrichment.data.text}</p>
-            {enrichment.data.reply_count > 0 && (
-              <div className="mt-3 text-sm text-gray-600">
-                {enrichment.data.reply_count}{' '}
-                {enrichment.data.reply_count === 1 ? 'reply' : 'replies'}
+      <div className="flex-1 overflow-y-auto">
+        {/* All Tab - Raw Data */}
+        {activeTab === EnrichmentTab.ALL && (
+          <div className="h-full flex flex-col">
+            <div className="p-4 border-b" style={{ borderColor: 'var(--border-color)' }}>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-medium text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  Raw Enrichment Data (Debug)
+                </h4>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(JSON.stringify(enrichments, null, 2));
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:opacity-80"
+                  style={{
+                    backgroundColor: 'var(--bg-tertiary)',
+                    color: 'var(--text-secondary)',
+                  }}
+                >
+                  {copied ? <Check size={12} /> : <Copy size={12} />}
+                  {copied ? 'Copied!' : 'Copy JSON'}
+                </button>
               </div>
-            )}
-          </div>
-        )}
-
-        {enrichment.type === 'pr_diff' && (
-          <div>
-            <h4 className="font-medium mb-2">
-              PR #{enrichment.data.pr_number}: {enrichment.data.pr_title}
-            </h4>
-            <p className="text-sm text-gray-600 mb-2">
-              by {enrichment.data.pr_author} • {enrichment.data.pr_source_branch} →{' '}
-              {enrichment.data.pr_target_branch}
-            </p>
-            <div className="text-xs px-2 py-1 rounded bg-gray-100 inline-block">
-              {enrichment.data.change_type}
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <pre
+                className="text-xs font-mono p-3 rounded overflow-auto"
+                style={{
+                  backgroundColor: '#f5f5f5',
+                  color: '#333',
+                }}
+              >
+                {JSON.stringify(enrichments, null, 2)}
+              </pre>
             </div>
           </div>
         )}
 
-        {enrichment.type === 'local_change' && (
-          <div>
-            <h4 className="font-medium mb-2">Uncommitted Changes</h4>
-            <div className="text-xs px-2 py-1 rounded bg-yellow-100 inline-block">
-              {enrichment.data.change_type}
-            </div>
+        {/* Comments Tab */}
+        {activeTab === EnrichmentTab.COMMENTS && (
+          <CommentsTab
+            comments={enrichments.comments || []}
+            fileName={fileName}
+            sourceUri={sourceUri}
+            selectedLines={selectedLines}
+            onCommentsChange={onCommentsChange}
+          />
+        )}
+
+        {/* Changes Tab */}
+        {activeTab === EnrichmentTab.CHANGES && (
+          <ChangesTab
+            currentFilePath={filePath}
+            onNavigateToFile={onNavigateToFile}
+            editEnrichments={enrichments.edit}
+            commitEnrichments={enrichments.commit}
+            onRefresh={onCommentsChange}
+          />
+        )}
+
+        {/* Other Tabs */}
+        {(activeTab === EnrichmentTab.DIFFS ||
+          activeTab === EnrichmentTab.PRS ||
+          activeTab === EnrichmentTab.LOCAL) && (
+          <div className="overflow-auto p-4">
+            {/* Diffs */}
+            {activeTab === EnrichmentTab.DIFFS &&
+              enrichments.diff &&
+              enrichments.diff.length > 0 && (
+                <div className="space-y-4 mb-6">
+                  <h4 className="font-medium text-sm" style={{ color: 'var(--text-secondary)' }}>
+                    Pending Changes ({enrichments.diff.length})
+                  </h4>
+                  {enrichments.diff.map(diff => (
+                    <DiffViewer
+                      key={diff.id}
+                      diff={diff}
+                      fileName={fileName}
+                      onAccept={onAcceptDiff}
+                      onReject={onRejectDiff}
+                    />
+                  ))}
+                </div>
+              )}
+
+            {/* PRs */}
+            {activeTab === EnrichmentTab.PRS &&
+              enrichments.pr_diff &&
+              enrichments.pr_diff.length > 0 && (
+                <div className="space-y-3 mb-6">
+                  <h4
+                    className="font-medium text-sm mb-3"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
+                    Pull Requests ({enrichments.pr_diff.length})
+                  </h4>
+                  {enrichments.pr_diff.map(pr => (
+                    <PRBanner
+                      key={pr.pr_number}
+                      prNumber={pr.pr_number}
+                      prTitle={pr.pr_title}
+                      prAuthor={pr.pr_author}
+                      prState={pr.pr_state}
+                      prUrl={pr.pr_url}
+                      diffHunks={pr.diff_hunks}
+                    />
+                  ))}
+                </div>
+              )}
+
+            {/* Empty state for PRs */}
+            {activeTab === EnrichmentTab.PRS &&
+              (!enrichments.pr_diff || enrichments.pr_diff.length === 0) && (
+                <div className="text-center py-8" style={{ color: 'var(--text-secondary)' }}>
+                  <GitBranch size={32} className="mx-auto mb-2 opacity-50" />
+                  <div className="text-sm">No pull request changes for this file</div>
+                </div>
+              )}
+
+            {/* Diffs - keep existing code */}
+            {activeTab === EnrichmentTab.DIFFS &&
+              enrichments.diff &&
+              enrichments.diff.length > 0 && (
+                <div className="space-y-4 mb-6">
+                  <h4 className="font-medium text-sm" style={{ color: 'var(--text-secondary)' }}>
+                    Pending Changes ({enrichments.diff.length})
+                  </h4>
+                  {enrichments.diff.map(diff => (
+                    <DiffViewer
+                      key={diff.id}
+                      diff={diff}
+                      fileName={fileName}
+                      onAccept={onAcceptDiff}
+                      onReject={onRejectDiff}
+                    />
+                  ))}
+                </div>
+              )}
+
+            {/* Empty state for Diffs */}
+            {activeTab === EnrichmentTab.DIFFS &&
+              (!enrichments.diff || enrichments.diff.length === 0) && (
+                <div className="text-center py-8" style={{ color: 'var(--text-secondary)' }}>
+                  <FileEdit size={32} className="mx-auto mb-2 opacity-50" />
+                  <div className="text-sm">No pending changes for this file</div>
+                </div>
+              )}
+
+            {/* Local Changes */}
+            {activeTab === EnrichmentTab.LOCAL &&
+              enrichments.local_changes &&
+              enrichments.local_changes.length > 0 && (
+                <div className="space-y-3 mb-6">
+                  <h4 className="font-medium text-sm" style={{ color: 'var(--text-secondary)' }}>
+                    Local Changes ({enrichments.local_changes.length})
+                  </h4>
+                  {enrichments.local_changes.map(change => (
+                    <div
+                      key={change.id}
+                      className="p-3 rounded border"
+                      style={{
+                        borderColor: 'var(--border-color)',
+                        backgroundColor: 'var(--bg-secondary)',
+                      }}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <AlertCircle size={14} style={{ color: '#ff9800' }} />
+                        <span
+                          className="text-sm font-medium"
+                          style={{ color: 'var(--text-primary)' }}
+                        >
+                          {change.commit_message || 'Local change'}
+                        </span>
+                      </div>
+                      <div
+                        className="flex items-center justify-between text-xs"
+                        style={{ color: 'var(--text-secondary)' }}
+                      >
+                        <span>{change.status}</span>
+                        <span>{new Date(change.created_at).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+            {/* Empty state for Local Changes */}
+            {activeTab === EnrichmentTab.LOCAL &&
+              (!enrichments.local_changes || enrichments.local_changes.length === 0) && (
+                <div className="text-center py-8" style={{ color: 'var(--text-secondary)' }}>
+                  <AlertCircle size={32} className="mx-auto mb-2 opacity-50" />
+                  <div className="text-sm">No local changes for this file</div>
+                </div>
+              )}
           </div>
         )}
       </div>
-
-      {/* Actions */}
-      {actions.length > 0 && (
-        <div>
-          <div className="flex flex-wrap gap-2">{actions.map(renderActionButton)}</div>
-
-          {selectedAction && renderActionInput(actions.find(a => a.action === selectedAction)!)}
-        </div>
-      )}
     </div>
   );
-};
-
-export default EnrichmentPanel;
+}

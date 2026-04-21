@@ -6,12 +6,6 @@ export enum Urls {
   Dashboard = 'dashboard',
   Spaces = 'spaces',
   SpaceConfiguration = 'space-configuration',
-  DocumentEditor = 'doc',
-  Search = 'search',
-  ChangeHistory = 'history',
-  PendingChanges = 'pending',
-  JiraIntegration = 'jira',
-  UserManagement = 'user-management',
   Profile = 'profile',
   Configuration = 'configuration',
 }
@@ -312,33 +306,6 @@ export interface ChangeRecord {
   summary: string;
   diff?: string;
   createdAt: string;
-}
-
-// =============================================================================
-// Pending Changes
-// =============================================================================
-
-export enum PendingChangeStatus {
-  Draft = 'draft',
-  Review = 'review',
-  Approved = 'approved',
-  Rejected = 'rejected',
-}
-
-export interface PendingChange {
-  id: number;
-  documentId: number;
-  documentTitle: string;
-  spaceId: number;
-  spaceName: string;
-  diff: string;
-  status: PendingChangeStatus;
-  authorId: number;
-  authorName: string;
-  reviewers: string[];
-  description: string;
-  createdAt: string;
-  updatedAt: string;
 }
 
 // =============================================================================

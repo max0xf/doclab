@@ -3,7 +3,7 @@ import { Star, Clock, Plus, ArrowRight } from 'lucide-react';
 import type { Space, UserSpacePreference } from '../../types';
 import spaceApi from '../../services/spaceApi';
 import { Urls } from '../../types';
-import CreateSpaceModal from '../../components/CreateSpaceModal';
+import CreateSpaceModal from '../../components/common/CreateSpaceModal';
 
 interface DashboardProps {
   navigate: (view: string) => void;

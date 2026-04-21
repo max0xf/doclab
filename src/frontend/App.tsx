@@ -3,23 +3,17 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { UserSettingsProvider } from './context/UserSettingsContext';
 import { DraftChangeProvider } from './context/DraftChangeContext';
-import Layout from './components/Layout';
-import LoginPage from './components/LoginPage';
-import ViewLoadingFallback from './components/ViewLoadingFallback';
+import Layout from './components/layout/Layout';
+import LoginPage from './components/auth/LoginPage';
+import ViewLoadingFallback from './components/common/ViewLoadingFallback';
 import { Urls } from './types';
 
 // Lazy-loaded views for code splitting
 const Dashboard = React.lazy(() => import('./views/Dashboard'));
 const Spaces = React.lazy(() => import('./views/Spaces'));
 const SpaceConfiguration = React.lazy(() => import('./views/SpaceConfiguration'));
-const DocumentEditor = React.lazy(() => import('./views/DocumentEditor'));
-const Search = React.lazy(() => import('./views/Search'));
-const UserManagement = React.lazy(() => import('./views/UserManagement'));
 const Profile = React.lazy(() => import('./views/Profile'));
 const Configuration = React.lazy(() => import('./views/Configuration'));
-const ChangeHistory = React.lazy(() => import('./views/ChangeHistory'));
-const PendingChanges = React.lazy(() => import('./views/PendingChanges'));
-const JiraIntegration = React.lazy(() => import('./views/JiraIntegration'));
 
 function getInitialView(): string {
   const hash = window.location.hash.slice(1);
@@ -60,14 +54,8 @@ function AppContent() {
         {activeView === Urls.Dashboard && <Dashboard navigate={navigate} />}
         {activeView === Urls.Spaces && <Spaces navigate={navigate} />}
         {activeView === Urls.SpaceConfiguration && <SpaceConfiguration />}
-        {activeView.startsWith(Urls.DocumentEditor) && <DocumentEditor />}
-        {activeView === Urls.Search && <Search />}
-        {activeView === Urls.UserManagement && <UserManagement />}
         {activeView === Urls.Profile && <Profile />}
         {activeView === Urls.Configuration && <Configuration />}
-        {activeView === Urls.ChangeHistory && <ChangeHistory />}
-        {activeView === Urls.PendingChanges && <PendingChanges />}
-        {activeView === Urls.JiraIntegration && <JiraIntegration />}
       </React.Suspense>
     );
   };
