@@ -35,7 +35,9 @@ describe('VirtualContentBuilder — comment: single comment on interior line', (
   });
 
   it('other lines have no enrichments', () => {
-    const withEnrichments = vc.finalLines.filter(l => l.lineNumber !== 2 && l.enrichments.length > 0);
+    const withEnrichments = vc.finalLines.filter(
+      l => l.lineNumber !== 2 && l.enrichments.length > 0
+    );
     expect(withEnrichments).toHaveLength(0);
   });
 
@@ -152,7 +154,9 @@ describe('VirtualContentBuilder — comment: two comments on same line', () => {
   });
 
   it('other lines have no enrichments', () => {
-    const withEnrichments = vc.finalLines.filter(l => l.lineNumber !== 3 && l.enrichments.length > 0);
+    const withEnrichments = vc.finalLines.filter(
+      l => l.lineNumber !== 3 && l.enrichments.length > 0
+    );
     expect(withEnrichments).toHaveLength(0);
   });
 });
