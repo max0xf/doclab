@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, MessageSquare, Edit, Save, X, GitPullRequest, Filter } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Pencil, Save, X, Filter } from 'lucide-react';
 import { ViewModeSwitcher } from './ViewModeSwitcher';
 import { ViewMode } from './virtual-content/types';
 
@@ -51,7 +51,7 @@ export function FileViewerHeader({
   commentsCount,
   showCommentsPanel,
   prNumbers,
-  selectedPR = 'all',
+  selectedPR: _selectedPR,
   commitShas,
   hasUncommittedChanges,
   hasCommittedChanges,
@@ -60,13 +60,12 @@ export function FileViewerHeader({
   onViewModeChange,
   onToggleEdit,
   onToggleComments,
-  onPRFilterChange,
+  onPRFilterChange: _onPRFilterChange,
   onContentFilterChange,
   onSave,
   onCancel,
   isDirty,
 }: FileViewerHeaderProps) {
-  // Helper to get current filter display value
   const getFilterValue = (): string => {
     if (typeof contentFilter === 'string') {
       return contentFilter;
@@ -80,7 +79,6 @@ export function FileViewerHeader({
     return 'all';
   };
 
-  // Helper to parse filter value from select
   const parseFilterValue = (value: string): ContentFilter => {
     if (
       value === ContentFilterType.ALL ||
@@ -99,11 +97,11 @@ export function FileViewerHeader({
     return ContentFilterType.ALL;
   };
 
-  // Check if we should show the filter dropdown
   const showContentFilter =
     !isEditMode &&
     onContentFilterChange &&
     ((prNumbers && prNumbers.length > 0) || hasUncommittedChanges || hasCommittedChanges);
+
   return (
     <div
       className="flex items-center justify-between px-4 py-2 border-b"
@@ -112,7 +110,7 @@ export function FileViewerHeader({
         borderColor: 'var(--border-color)',
       }}
     >
-      {/* Left: Back button and file info */}
+      {/* Left: Back button, breadcrumb, and content filter */}
       <div className="flex items-center gap-2">
         <button
           onClick={onBack}
@@ -128,78 +126,98 @@ export function FileViewerHeader({
         <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
           {spaceName} / {breadcrumbPath || filePath}
         </div>
-      </div>
 
-      {/* Right: Controls */}
-      <div className="flex items-center gap-1.5">
-        {/* View Mode Switcher */}
-        {!isEditMode && <ViewModeSwitcher currentMode={viewMode} onModeChange={onViewModeChange} />}
-
-        {/* Content Filter Dropdown */}
+        {/* Content filter — belongs with the breadcrumb since it filters the main view */}
         {showContentFilter && (
-          <div className="flex items-center gap-1">
-            <Filter size={14} style={{ color: 'var(--text-secondary)' }} />
-            <select
-              value={getFilterValue()}
-              onChange={e => onContentFilterChange?.(parseFilterValue(e.target.value))}
-              className="px-2 py-1 text-xs rounded border"
-              style={{
-                backgroundColor: 'var(--bg-tertiary)',
-                color: 'var(--text-primary)',
-                borderColor: 'var(--border-color)',
-              }}
-            >
-              <option value="all">All Changes</option>
-              <option value="original">Original Content</option>
-              {hasUncommittedChanges && (
-                <option value="my_changes">✏️ My Uncommitted Changes</option>
-              )}
-              {hasCommittedChanges && <option value="my_commits">📦 My Commits</option>}
-              {prNumbers &&
-                prNumbers.map(prNum => (
-                  <option key={prNum} value={`pr-${prNum}`}>
-                    PR #{prNum}
-                  </option>
-                ))}
-              {commitShas &&
-                commitShas.map(sha => (
-                  <option key={sha} value={`commit-${sha}`}>
-                    Commit {sha.slice(0, 7)}
-                  </option>
-                ))}
-            </select>
-          </div>
-        )}
-
-        {/* Legacy PR Filter Dropdown - kept for backward compatibility */}
-        {!isEditMode &&
-          !showContentFilter &&
-          prNumbers &&
-          prNumbers.length > 1 &&
-          onPRFilterChange && (
+          <>
+            <div
+              className="w-px h-4 self-center"
+              style={{ backgroundColor: 'var(--border-color)' }}
+            />
             <div className="flex items-center gap-1">
-              <GitPullRequest size={14} style={{ color: 'var(--text-secondary)' }} />
+              <Filter size={12} style={{ color: 'var(--text-secondary)' }} />
               <select
-                value={selectedPR}
-                onChange={e =>
-                  onPRFilterChange(e.target.value === 'all' ? 'all' : Number(e.target.value))
-                }
-                className="px-2 py-1 text-xs rounded border"
+                value={getFilterValue()}
+                onChange={e => onContentFilterChange?.(parseFilterValue(e.target.value))}
+                className="px-2 py-0.5 text-xs rounded border"
                 style={{
                   backgroundColor: 'var(--bg-tertiary)',
                   color: 'var(--text-primary)',
                   borderColor: 'var(--border-color)',
                 }}
               >
-                <option value="all">All PRs ({prNumbers.length})</option>
-                {prNumbers.map(prNum => (
-                  <option key={prNum} value={prNum}>
-                    PR #{prNum}
-                  </option>
-                ))}
+                <option value="all">All Changes</option>
+                <option value="original">Original</option>
+                {hasUncommittedChanges && <option value="my_changes">My Draft</option>}
+                {hasCommittedChanges && <option value="my_commits">My Commits</option>}
+                {prNumbers &&
+                  prNumbers.map(prNum => (
+                    <option key={prNum} value={`pr-${prNum}`}>
+                      PR #{prNum}
+                    </option>
+                  ))}
+                {commitShas &&
+                  commitShas.map(sha => (
+                    <option key={sha} value={`commit-${sha}`}>
+                      {sha.slice(0, 7)}
+                    </option>
+                  ))}
               </select>
             </div>
-          )}
+          </>
+        )}
+      </div>
+
+      {/* Right: View mode + panel toggles */}
+      <div className="flex items-center gap-1.5">
+        {/* Edit toggle / Save+Cancel */}
+        {isEditMode ? (
+          <>
+            <button
+              onClick={onSave}
+              disabled={!isDirty}
+              title="Save changes"
+              className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded hover:opacity-80 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{
+                backgroundColor: isDirty ? '#0066cc' : 'var(--bg-tertiary)',
+                color: isDirty ? 'white' : 'var(--text-secondary)',
+                border: '1px solid var(--border-color)',
+              }}
+            >
+              <Save size={12} />
+              Save
+            </button>
+            <button
+              onClick={onCancel}
+              title="Discard changes"
+              className="flex items-center px-1.5 py-0.5 text-xs rounded hover:opacity-80 transition-opacity"
+              style={{
+                backgroundColor: 'var(--bg-tertiary)',
+                color: 'var(--text-secondary)',
+                border: '1px solid var(--border-color)',
+              }}
+            >
+              <X size={13} />
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={onToggleEdit}
+            title="Edit file"
+            className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded transition-all hover:opacity-80"
+            style={{
+              backgroundColor: 'var(--bg-tertiary)',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border-color)',
+            }}
+          >
+            <Pencil size={12} />
+            Edit
+          </button>
+        )}
+
+        {/* View Mode Switcher */}
+        <ViewModeSwitcher currentMode={viewMode} onModeChange={onViewModeChange} />
 
         {/* Comments Button */}
         <button
@@ -213,47 +231,6 @@ export function FileViewerHeader({
           <MessageSquare size={14} />
           Comments {commentsCount ? `(${commentsCount})` : ''}
         </button>
-
-        {/* Edit Mode Controls */}
-        {isEditMode ? (
-          <>
-            <button
-              onClick={onCancel}
-              className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:opacity-80 transition-opacity"
-              style={{
-                backgroundColor: 'var(--bg-tertiary)',
-                color: 'var(--text-secondary)',
-              }}
-            >
-              <X size={14} />
-              Cancel
-            </button>
-            <button
-              onClick={onSave}
-              disabled={!isDirty}
-              className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{
-                backgroundColor: '#0066cc',
-                color: 'white',
-              }}
-            >
-              <Save size={14} />
-              Save
-            </button>
-          </>
-        ) : (
-          <button
-            onClick={onToggleEdit}
-            className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:opacity-80 transition-opacity"
-            style={{
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            <Edit size={14} />
-            Edit
-          </button>
-        )}
       </div>
     </div>
   );

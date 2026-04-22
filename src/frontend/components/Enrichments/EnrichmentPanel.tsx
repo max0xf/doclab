@@ -19,6 +19,7 @@ interface EnrichmentPanelProps {
   enrichments: EnrichmentsResponse;
   fileName: string;
   filePath?: string;
+  spaceId?: string;
   sourceUri: string;
   selectedLines: { start: number; end: number } | null;
   activeTab?: EnrichmentTab;
@@ -27,6 +28,7 @@ interface EnrichmentPanelProps {
   onRejectDiff?: (diffId: string) => void;
   onCommentsChange?: () => void;
   onNavigateToFile?: (filePath: string) => void;
+  onLog?: (msg: string, level?: 'info' | 'success' | 'error') => void;
 }
 
 export enum EnrichmentTab {
@@ -42,6 +44,7 @@ export default function EnrichmentPanel({
   enrichments,
   fileName,
   filePath,
+  spaceId,
   sourceUri,
   selectedLines,
   activeTab: initialActiveTab = EnrichmentTab.ALL,
@@ -50,6 +53,7 @@ export default function EnrichmentPanel({
   onRejectDiff,
   onCommentsChange,
   onNavigateToFile,
+  onLog,
 }: EnrichmentPanelProps) {
   const [activeTab, setActiveTab] = useState<EnrichmentTab>(initialActiveTab);
   const [copied, setCopied] = useState(false);
@@ -243,10 +247,12 @@ export default function EnrichmentPanel({
         {activeTab === EnrichmentTab.CHANGES && (
           <ChangesTab
             currentFilePath={filePath}
+            spaceId={spaceId}
             onNavigateToFile={onNavigateToFile}
             editEnrichments={enrichments.edit}
             commitEnrichments={enrichments.commit}
             onRefresh={onCommentsChange}
+            onLog={onLog}
           />
         )}
 

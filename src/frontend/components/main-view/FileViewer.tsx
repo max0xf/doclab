@@ -13,12 +13,14 @@ interface FileViewerProps {
   filePath: string;
   breadcrumbPath?: string;
   spaceName: string;
+  spaceId?: string;
   content: string;
   enrichments: EnrichmentsResponse;
   onBack: () => void;
   onSave: (newContent: string, description: string) => Promise<void>;
   onEnrichmentsReload?: () => void;
   sourceUri: string;
+  onLog?: (msg: string, level?: 'info' | 'success' | 'error') => void;
 }
 
 export function FileViewer({
@@ -26,12 +28,14 @@ export function FileViewer({
   filePath,
   breadcrumbPath,
   spaceName,
+  spaceId,
   content,
   enrichments: enrichmentsResponse,
   onBack,
   onSave,
   onEnrichmentsReload,
   sourceUri,
+  onLog,
 }: FileViewerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.PLAIN);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -348,6 +352,11 @@ export function FileViewer({
   const handleEnrichmentClick = (enrichment: Enrichment) => {
     console.log('[FileViewer] Enrichment clicked:', enrichment);
     setShowCommentsPanel(true);
+    if (enrichment.type === 'edit' || enrichment.type === 'commit') {
+      setActiveEnrichmentTab(EnrichmentTab.CHANGES);
+    } else {
+      setActiveEnrichmentTab(EnrichmentTab.COMMENTS);
+    }
   };
 
   // Conflict resolution handlers
@@ -459,6 +468,7 @@ export function FileViewer({
               enrichments={enrichmentsResponse}
               fileName={fileName}
               filePath={filePath}
+              spaceId={spaceId}
               sourceUri={sourceUri}
               selectedLines={selectedLines}
               activeTab={activeEnrichmentTab}
@@ -473,6 +483,7 @@ export function FileViewer({
                 console.log('[FileViewer] Rejecting diff:', diffId);
               }}
               onCommentsChange={handleCommentsChange}
+              onLog={onLog}
             />
           </div>
         )}

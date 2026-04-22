@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   ArrowLeft,
   Folder,
@@ -15,6 +15,7 @@ import { fileMappingApi, type FileMapping } from '../../services/fileMappingApi'
 import SmartLoadingIndicator from '../common/SmartLoadingIndicator';
 import { useDraftChanges } from '../../context/DraftChangeContext';
 import { FileViewer } from './FileViewer';
+import { SpaceWorkspaceBar, type SpaceWorkspaceBarHandle } from './SpaceWorkspaceBar';
 
 interface MainViewProps {
   selectedSpace: Space | null;
@@ -68,6 +69,11 @@ function SpaceContentView({ space, initialPath, viewMode }: SpaceContentViewProp
   const urlPath = urlParams.get('path');
   const initialPathToUse = urlPath || initialPath || '';
 
+  const workspaceBarRef = useRef<SpaceWorkspaceBarHandle>(null);
+  const handleLog = useCallback((msg: string, level: 'info' | 'success' | 'error' = 'info') => {
+    workspaceBarRef.current?.addLog(msg, level);
+  }, []);
+
   const [currentPath, setCurrentPath] = useState<string>(initialPathToUse);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
@@ -81,6 +87,7 @@ function SpaceContentView({ space, initialPath, viewMode }: SpaceContentViewProp
     >
   >({});
   const [spaceEnrichments, setSpaceEnrichments] = useState<Record<string, EnrichmentsResponse>>({});
+  const [enrichmentRefreshKey, setEnrichmentRefreshKey] = useState(0);
 
   // Update URL when path changes
   const updatePath = useCallback((newPath: string) => {
@@ -396,6 +403,20 @@ function SpaceContentView({ space, initialPath, viewMode }: SpaceContentViewProp
     setSelectedFile(null);
   };
 
+  const workspaceBar = (
+    <SpaceWorkspaceBar
+      ref={workspaceBarRef}
+      space={space}
+      onRefresh={() => {
+        setSpaceEnrichments({});
+        setEnrichmentRefreshKey(k => k + 1);
+      }}
+      onNavigateToFile={file =>
+        handleFileClick({ name: file.split('/').pop() || file, type: 'file', path: file })
+      }
+    />
+  );
+
   // If a file is selected, show file viewer
   if (selectedFile) {
     // Build source URI for enrichments and comments
@@ -409,34 +430,42 @@ function SpaceContentView({ space, initialPath, viewMode }: SpaceContentViewProp
     );
 
     return (
-      <FileContentView
-        space={space}
-        file={selectedFile}
-        fileContent={fileContent}
-        isLoading={isLoadingFileContent}
-        sourceUri={sourceUri}
-        onBack={() => {
-          setSelectedFile(null);
-          const pathParts = currentPath.split('/');
-          pathParts.pop();
-          updatePath(pathParts.join('/'));
-        }}
-      />
+      <div className="flex flex-col h-full overflow-hidden">
+        {workspaceBar}
+        <FileContentView
+          space={space}
+          file={selectedFile}
+          fileContent={fileContent}
+          isLoading={isLoadingFileContent}
+          sourceUri={sourceUri}
+          enrichmentRefreshKey={enrichmentRefreshKey}
+          onLog={handleLog}
+          onBack={() => {
+            setSelectedFile(null);
+            const pathParts = currentPath.split('/');
+            pathParts.pop();
+            updatePath(pathParts.join('/'));
+          }}
+        />
+      </div>
     );
   }
 
   // Otherwise, show file browser (tree view)
   return (
-    <FileBrowserView
-      space={space}
-      files={files}
-      currentPath={currentPath}
-      isLoading={isLoadingDirectory}
-      enrichmentCounts={enrichmentCounts}
-      onFileClick={handleFileClick}
-      onNavigateUp={handleNavigateUp}
-      viewMode={viewMode}
-    />
+    <div className="flex flex-col h-full overflow-hidden">
+      {workspaceBar}
+      <FileBrowserView
+        space={space}
+        files={files}
+        currentPath={currentPath}
+        isLoading={isLoadingDirectory}
+        enrichmentCounts={enrichmentCounts}
+        onFileClick={handleFileClick}
+        onNavigateUp={handleNavigateUp}
+        viewMode={viewMode}
+      />
+    </div>
   );
 }
 
@@ -705,6 +734,8 @@ interface FileContentViewProps {
   isLoading: boolean;
   onBack: () => void;
   sourceUri: string;
+  enrichmentRefreshKey?: number;
+  onLog?: (msg: string, level?: 'info' | 'success' | 'error') => void;
 }
 
 function FileContentView({
@@ -714,6 +745,8 @@ function FileContentView({
   isLoading,
   onBack,
   sourceUri,
+  enrichmentRefreshKey,
+  onLog,
 }: FileContentViewProps) {
   const [enrichments, setEnrichments] = useState<EnrichmentsResponse>({});
   const [mappings, setMappings] = useState<Map<string, FileMapping>>(new Map());
@@ -784,10 +817,10 @@ function FileContentView({
     }
   }, [file, sourceUri]);
 
-  // Load enrichments when file changes
+  // Load enrichments when file changes or workspace state resets
   useEffect(() => {
     loadEnrichments();
-  }, [sourceUri, loadEnrichments]);
+  }, [sourceUri, loadEnrichments, enrichmentRefreshKey]);
 
   const handleSave = async (newContent: string, description: string) => {
     console.log('[FileContentView] Saving changes:', { file: file.path, description });
@@ -819,12 +852,14 @@ function FileContentView({
       filePath={file.path}
       breadcrumbPath={breadcrumbPath}
       spaceName={space.name}
+      spaceId={space.id}
       content={fileContent}
       enrichments={enrichments}
       onBack={onBack}
       onSave={handleSave}
       onEnrichmentsReload={loadEnrichments}
       sourceUri={sourceUri}
+      onLog={onLog}
     />
   );
 }

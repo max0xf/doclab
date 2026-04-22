@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Pencil, GitCommit } from 'lucide-react';
 import { Enrichment, LayeredVirtualContent, VirtualLine, DiffType } from '../virtual-content/types';
 import { ConflictDetailsDialog } from './ConflictDetailsDialog';
 
@@ -153,32 +154,49 @@ export const PlainTextContentRenderer: React.FC<PlainTextContentRendererProps> =
                 </div>
               )}
 
-              {/* Commit badge */}
+              {/* Commit badge — icon only */}
               {showCommitBadge && (
                 <div
-                  className="px-2 py-0.5 rounded text-xs font-semibold"
+                  className="flex items-center justify-center rounded"
+                  title="Committed to branch"
                   style={{
+                    width: 22,
+                    height: 22,
                     backgroundColor: '#f3e8ff',
                     color: '#7c3aed',
                     border: '1px solid #8b5cf6',
+                    flexShrink: 0,
                   }}
                 >
-                  📦 Committed
+                  <GitCommit size={12} />
                 </div>
               )}
 
-              {/* Edit badge */}
+              {/* Edit badge — pencil icon only, opens Changes tab */}
               {showEditBadge && (
-                <div
-                  className="px-2 py-0.5 rounded text-xs font-semibold"
+                <button
+                  className="flex items-center justify-center rounded"
                   style={{
+                    width: 22,
+                    height: 22,
                     backgroundColor: '#dbeafe',
                     color: '#1d4ed8',
                     border: '1px solid #3b82f6',
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                  }}
+                  title="Your draft change — click to view in Changes tab"
+                  onClick={e => {
+                    e.stopPropagation();
+                    onEnrichmentClick?.({
+                      type: 'edit',
+                      id: vLine.editId || '',
+                      data: {},
+                    } as Enrichment);
                   }}
                 >
-                  ✏️ Your change
-                </div>
+                  <Pencil size={12} />
+                </button>
               )}
             </div>
           )}
