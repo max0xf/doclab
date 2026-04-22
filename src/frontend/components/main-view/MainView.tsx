@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, Folder, FileText, MessageSquare, GitBranch } from 'lucide-react';
+import {
+  ArrowLeft,
+  Folder,
+  FileText,
+  MessageSquare,
+  GitBranch,
+  GitCommit,
+  Pencil,
+} from 'lucide-react';
 import { enrichmentApi, type EnrichmentsResponse } from '../../services/enrichmentApi';
 import type { Space } from '../../types';
 import { apiClient } from '../../services/apiClient';
@@ -67,7 +75,10 @@ function SpaceContentView({ space, initialPath, viewMode }: SpaceContentViewProp
   const [isLoadingDirectory, setIsLoadingDirectory] = useState(false);
   const [isLoadingFileContent, setIsLoadingFileContent] = useState(false);
   const [enrichmentCounts, setEnrichmentCounts] = useState<
-    Record<string, { comments: number; prNumbers: number[]; diffs: number }>
+    Record<
+      string,
+      { comments: number; prNumbers: number[]; diffs: number; localChanges: number; edits: number }
+    >
   >({});
   const [spaceEnrichments, setSpaceEnrichments] = useState<Record<string, EnrichmentsResponse>>({});
 
@@ -213,16 +224,32 @@ function SpaceContentView({ space, initialPath, viewMode }: SpaceContentViewProp
         });
 
         console.log('Transformed items:', items);
+
+        // If tree returns nothing for a non-root path the path is a file, not a directory.
+        if (items.length === 0 && currentPath) {
+          const name = currentPath.split('/').pop() || currentPath;
+          setSelectedFile({ name, type: 'file', path: currentPath });
+          return;
+        }
+
         setFiles(items);
 
         // Calculate enrichment counts from space enrichments
         console.log('[Enrichments] Calculating counts for path:', currentPath || '(root)');
         console.log('[Enrichments] Total space enrichments:', Object.keys(spaceEnrichments).length);
-        const counts: Record<string, { comments: number; prNumbers: number[]; diffs: number }> = {};
+        const counts: Record<
+          string,
+          {
+            comments: number;
+            prNumbers: number[];
+            diffs: number;
+            localChanges: number;
+            edits: number;
+          }
+        > = {};
 
         items.forEach(item => {
           if (item.type === 'file') {
-            // For files, get direct enrichment counts
             const enrichment = spaceEnrichments[item.path];
             if (enrichment) {
               const prNumbers = Array.isArray(enrichment.pr_diff)
@@ -230,16 +257,21 @@ function SpaceContentView({ space, initialPath, viewMode }: SpaceContentViewProp
                 : [];
               counts[item.path] = {
                 comments: Array.isArray(enrichment.comments) ? enrichment.comments.length : 0,
-                prNumbers: prNumbers,
+                prNumbers,
                 diffs: Array.isArray(enrichment.diff) ? enrichment.diff.length : 0,
+                localChanges: Array.isArray(enrichment.local_changes)
+                  ? enrichment.local_changes.length
+                  : 0,
+                edits: Array.isArray(enrichment.edit) ? enrichment.edit.length : 0,
               };
             }
           } else {
-            // For folders, aggregate unique PR numbers from all files within them
             const folderPrefix = item.path + '/';
             let totalComments = 0;
             const uniquePrNumbers = new Set<number>();
             let totalDiffs = 0;
+            let totalLocalChanges = 0;
+            let totalEdits = 0;
             let matchedFiles = 0;
 
             Object.entries(spaceEnrichments).forEach(([filePath, enrichment]) => {
@@ -256,18 +288,30 @@ function SpaceContentView({ space, initialPath, viewMode }: SpaceContentViewProp
                   });
                 }
                 totalDiffs += Array.isArray(enrichment.diff) ? enrichment.diff.length : 0;
+                totalLocalChanges += Array.isArray(enrichment.local_changes)
+                  ? enrichment.local_changes.length
+                  : 0;
+                totalEdits += Array.isArray(enrichment.edit) ? enrichment.edit.length : 0;
               }
             });
 
-            if (totalComments > 0 || uniquePrNumbers.size > 0 || totalDiffs > 0) {
+            if (
+              totalComments > 0 ||
+              uniquePrNumbers.size > 0 ||
+              totalDiffs > 0 ||
+              totalLocalChanges > 0 ||
+              totalEdits > 0
+            ) {
               const prNumbers = Array.from(uniquePrNumbers).sort((a, b) => b - a);
               console.log(
                 `[Enrichments] Folder ${item.path}: ${matchedFiles} files, PRs: ${prNumbers.join(', ')}`
               );
               counts[item.path] = {
                 comments: totalComments,
-                prNumbers: prNumbers,
+                prNumbers,
                 diffs: totalDiffs,
+                localChanges: totalLocalChanges,
+                edits: totalEdits,
               };
             }
           }
@@ -401,7 +445,10 @@ interface FileBrowserViewProps {
   files: FileItem[];
   currentPath: string;
   isLoading: boolean;
-  enrichmentCounts: Record<string, { comments: number; prNumbers: number[]; diffs: number }>;
+  enrichmentCounts: Record<
+    string,
+    { comments: number; prNumbers: number[]; diffs: number; localChanges: number; edits: number }
+  >;
   onFileClick: (file: FileItem) => void;
   onNavigateUp: () => void;
   viewMode: 'developer' | 'document';
@@ -536,11 +583,15 @@ function FileBrowserView({
                 comments: 0,
                 prNumbers: [],
                 diffs: 0,
+                localChanges: 0,
+                edits: 0,
               };
               const hasEnrichments =
                 enrichments.comments > 0 ||
                 enrichments.prNumbers.length > 0 ||
-                enrichments.diffs > 0;
+                enrichments.diffs > 0 ||
+                enrichments.localChanges > 0 ||
+                enrichments.edits > 0;
               const displayName = getDisplayName(file);
 
               return (
@@ -584,21 +635,48 @@ function FileBrowserView({
                     )}
                   </div>
 
-                  {/* PRs Column */}
+                  {/* PRs / Diffs / Local Changes Column */}
                   <div className="col-span-2 flex items-center justify-center gap-1 flex-wrap">
                     {enrichments.prNumbers.length > 0 && (
                       <span
                         className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium"
-                        style={{
-                          backgroundColor: '#6f42c1',
-                          color: 'white',
-                        }}
+                        style={{ backgroundColor: '#6f42c1', color: 'white' }}
                         title={`PRs: ${enrichments.prNumbers.join(', ')}`}
                       >
                         <GitBranch size={12} />
                         {enrichments.prNumbers.slice(0, 3).join(', ')}
                         {enrichments.prNumbers.length > 3 &&
                           ` +${enrichments.prNumbers.length - 3}`}
+                      </span>
+                    )}
+                    {enrichments.diffs > 0 && (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium"
+                        style={{ backgroundColor: '#e65100', color: 'white' }}
+                        title={`${enrichments.diffs} diff${enrichments.diffs !== 1 ? 's' : ''}`}
+                      >
+                        <GitCommit size={12} />
+                        {enrichments.diffs}
+                      </span>
+                    )}
+                    {enrichments.localChanges > 0 && (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium"
+                        style={{ backgroundColor: '#2e7d32', color: 'white' }}
+                        title={`${enrichments.localChanges} local change${enrichments.localChanges !== 1 ? 's' : ''}`}
+                      >
+                        <Pencil size={12} />
+                        {enrichments.localChanges}
+                      </span>
+                    )}
+                    {enrichments.edits > 0 && (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium"
+                        style={{ backgroundColor: '#0277bd', color: 'white' }}
+                        title={`${enrichments.edits} draft edit${enrichments.edits !== 1 ? 's' : ''}`}
+                      >
+                        <Pencil size={12} />
+                        {enrichments.edits}
                       </span>
                     )}
                   </div>
