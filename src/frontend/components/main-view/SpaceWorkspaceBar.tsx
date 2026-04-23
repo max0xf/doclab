@@ -83,11 +83,12 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
       });
       setLogs(prev => [...prev, { time, message, level }]);
       setCurrentStep(message);
-      // Auto-clear step label 5s after the last log entry
+      // Auto-clear: keep info steps visible for 30s (long ops), clear success/error quickly
       if (stepClearTimer.current) {
         clearTimeout(stepClearTimer.current);
       }
-      stepClearTimer.current = setTimeout(() => setCurrentStep(null), 5000);
+      const clearDelay = level === 'info' ? 30000 : 5000;
+      stepClearTimer.current = setTimeout(() => setCurrentStep(null), clearDelay);
     }, []);
 
     useImperativeHandle(ref, () => ({ addLog }), [addLog]);
@@ -532,7 +533,10 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
                   borderColor: 'var(--border-color)',
                 }}
               >
-                <span className="text-xs font-medium flex-1" style={{ color: 'var(--text-secondary)' }}>
+                <span
+                  className="text-xs font-medium flex-1"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
                   {branch.branch_name}
                 </span>
                 {!isPrOpen && (
