@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Pencil, GitCommit } from 'lucide-react';
+import { Pencil, GitCommit, AlertTriangle } from 'lucide-react';
 import { Enrichment, LayeredVirtualContent, VirtualLine, DiffType } from '../virtual-content/types';
 import { ConflictDetailsDialog } from './ConflictDetailsDialog';
 
@@ -28,39 +28,23 @@ export const PlainTextContentRenderer: React.FC<PlainTextContentRendererProps> =
       0
     );
 
-  const conflictBadgeText = (enrichment: any): string => {
-    const { firstEnrichment, secondEnrichment } = enrichment.data || {};
-    const label = (e: any) => {
-      if (!e) {
-        return '?';
-      }
-      if (e.type === 'pr_diff') {
-        return `PR #${e.data?.pr_number}`;
-      }
-      if (e.type === 'commit') {
-        return `Commit ${String(e.data?.commit_sha).slice(0, 7)}`;
-      }
-      if (e.type === 'edit_session') {
-        return 'Your edit';
-      }
-      return e.type;
-    };
-    return `${label(firstEnrichment)} vs ${label(secondEnrichment)}`;
-  };
-
   const renderLine = (vLine: VirtualLine) => {
     const isDeletion = vLine.diffType === DiffType.DELETION;
     const isAddition = vLine.diffType === DiffType.ADDITION;
 
+    const commentEnrichments = vLine.enrichments.filter(e => e.type === 'comment');
+    const conflictEnrichments = vLine.enrichments.filter(e => e.type === 'conflict');
+    // Only show the conflict badge on the first line of each conflict block.
+    const firstLineConflicts = conflictEnrichments.filter(ce => vLine.lineNumber === ce.lineStart);
+
     let backgroundColor = 'transparent';
-    if (isDeletion) {
+    if (conflictEnrichments.length > 0) {
+      backgroundColor = '#fff7ed';
+    } else if (isDeletion) {
       backgroundColor = '#ffdce0';
     } else if (isAddition) {
       backgroundColor = '#cdffd8';
     }
-
-    const commentEnrichments = vLine.enrichments.filter(e => e.type === 'comment');
-    const conflictEnrichments = vLine.enrichments.filter(e => e.type === 'conflict');
 
     const showPRBadge = !!(vLine.prNumber && vLine.isFirstInDiffGroup);
     const showCommitBadge = !!(vLine.commitSha && vLine.isFirstInDiffGroup);
@@ -68,7 +52,7 @@ export const PlainTextContentRenderer: React.FC<PlainTextContentRendererProps> =
 
     const hasBadges =
       commentEnrichments.length > 0 ||
-      conflictEnrichments.length > 0 ||
+      firstLineConflicts.length > 0 ||
       showPRBadge ||
       showCommitBadge ||
       showEditBadge;
@@ -121,24 +105,35 @@ export const PlainTextContentRenderer: React.FC<PlainTextContentRendererProps> =
                 </div>
               )}
 
-              {/* Conflict badges — one per conflict, showing which enrichments clash */}
-              {conflictEnrichments.map((ce, i) => (
-                <div
-                  key={ce.id}
-                  className="px-2 py-0.5 rounded text-xs font-semibold cursor-pointer whitespace-nowrap"
+              {/* Conflict badge — single icon on the first line of each conflict block */}
+              {firstLineConflicts.length > 0 && (
+                <button
+                  className="flex items-center justify-center gap-0.5 rounded"
                   style={{
+                    minWidth: 22,
+                    height: 22,
+                    paddingLeft: firstLineConflicts.length > 1 ? 5 : 0,
+                    paddingRight: firstLineConflicts.length > 1 ? 5 : 0,
                     backgroundColor: '#fef2f2',
                     color: '#dc2626',
                     border: '1px solid #ef4444',
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                    fontSize: 11,
+                    fontWeight: 600,
                   }}
+                  title={`${firstLineConflicts.length} conflict${firstLineConflicts.length > 1 ? 's' : ''} — click to review`}
                   onClick={e => {
                     e.stopPropagation();
-                    setConflictDialog({ conflicts: conflictEnrichments, initialIndex: i });
+                    setConflictDialog({ conflicts: firstLineConflicts, initialIndex: 0 });
                   }}
                 >
-                  ⚠️ {conflictBadgeText(ce)}
-                </div>
-              ))}
+                  <AlertTriangle size={12} />
+                  {firstLineConflicts.length > 1 && (
+                    <span style={{ lineHeight: 1 }}>{firstLineConflicts.length}</span>
+                  )}
+                </button>
+              )}
 
               {/* PR diff badge */}
               {showPRBadge && (
