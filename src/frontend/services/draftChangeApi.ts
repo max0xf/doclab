@@ -27,6 +27,7 @@ export interface DraftChangeListItem {
   file_path: string;
   change_type: 'modify' | 'create' | 'delete';
   description: string;
+  branch_id: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -116,6 +116,7 @@ export interface CommitEnrichment extends Enrichment {
   file_path: string;
   branch_name: string;
   base_branch: string;
+  task_name?: string | null;
   commit_sha: string | null;
   user: string;
   user_full_name: string;

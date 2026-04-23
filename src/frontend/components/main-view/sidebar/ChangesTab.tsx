@@ -460,225 +460,285 @@ export function ChangesTab({
             );
           })}
 
-          {/* Committed Changes Section */}
-          {commitEnrichments.length > 0 && (
-            <>
-              <div
-                className="px-4 py-3 border-b"
-                style={{
-                  borderColor: 'var(--border-color)',
-                  backgroundColor: 'var(--bg-secondary)',
-                }}
-              >
-                <div className="flex items-center gap-2">
-                  <GitCommit size={16} className="text-purple-600" />
-                  <h3 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                    Committed Changes
-                  </h3>
-                  <span
-                    className="text-xs px-1.5 py-0.5 rounded"
-                    style={{ backgroundColor: '#f3e8ff', color: '#9333ea' }}
-                  >
-                    {commitEnrichments.length} file{commitEnrichments.length !== 1 ? 's' : ''}
-                  </span>
-                  <div className="flex-1" />
-                  {spaceId && (
-                    <button
-                      disabled={isLoading}
-                      className="flex items-center gap-1 px-2 py-1 text-xs rounded disabled:opacity-50"
-                      style={{
-                        backgroundColor: 'var(--bg-primary)',
-                        color: 'var(--text-secondary)',
-                        border: '1px solid var(--border-color)',
-                      }}
-                      title="Move commits back to draft edits"
-                      onClick={() =>
-                        askConfirm('Move all commits back to draft edits?', async () => {
-                          setIsLoading(true);
-                          try {
-                            await unstageBranch(spaceId);
-                            onRefresh?.();
-                          } catch (err) {
-                            console.error('Failed to unstage:', err);
-                          } finally {
-                            setIsLoading(false);
-                          }
-                        })
-                      }
-                    >
-                      <GitCommit size={12} />
-                      Unstage all
-                    </button>
-                  )}
-                </div>
-                <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
-                  Changes committed to your branch, ready for PR
-                </p>
-              </div>
+          {/* Committed Changes Section — grouped by workspace */}
+          {commitEnrichments.length > 0 &&
+            (() => {
+              // Group by branch ID (workspace)
+              const groups = new Map<string, CommitEnrichment[]>();
+              for (const c of commitEnrichments) {
+                const existing = groups.get(c.id);
+                if (existing) {
+                  existing.push(c);
+                } else {
+                  groups.set(c.id, [c]);
+                }
+              }
 
-              {commitEnrichments.map(commit => {
-                const isExpanded = expandedFiles.has(`commit-${commit.id}`);
-                const isCurrentFile = commit.file_path === currentFilePath;
-
-                return (
+              return (
+                <>
                   <div
-                    key={`commit-${commit.id}`}
-                    className="border-b"
-                    style={{ borderColor: 'var(--border-color)' }}
+                    className="px-4 py-3 border-b"
+                    style={{
+                      borderColor: 'var(--border-color)',
+                      backgroundColor: 'var(--bg-secondary)',
+                    }}
                   >
-                    {/* Commit File Header */}
-                    <div
-                      className="flex items-center gap-2 px-4 py-2 cursor-pointer hover:bg-opacity-50"
-                      style={{
-                        backgroundColor: isCurrentFile ? 'var(--bg-secondary)' : 'transparent',
-                      }}
-                      onClick={() => toggleExpanded(`commit-${commit.id}`)}
-                    >
-                      <button className="p-0.5">
-                        {isExpanded ? (
-                          <ChevronDown size={14} style={{ color: 'var(--text-secondary)' }} />
-                        ) : (
-                          <ChevronRight size={14} style={{ color: 'var(--text-secondary)' }} />
-                        )}
-                      </button>
-
-                      <GitCommit size={14} className="text-purple-600" />
-
-                      <span
-                        className="flex-1 text-sm truncate cursor-pointer hover:underline"
-                        style={{ color: 'var(--text-primary)' }}
-                        onClick={e => {
-                          e.stopPropagation();
-                          onNavigateToFile?.(commit.file_path);
-                        }}
-                      >
-                        {commit.file_path}
-                      </span>
-
-                      {(commit.additions || commit.deletions) && (
-                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                          <span className="text-green-600">+{commit.additions || 0}</span>
-                          {' / '}
-                          <span className="text-red-600">-{commit.deletions || 0}</span>
-                        </span>
-                      )}
-
+                    <div className="flex items-center gap-2">
+                      <GitCommit size={16} className="text-purple-600" />
+                      <h3 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                        Committed Changes
+                      </h3>
                       <span
                         className="text-xs px-1.5 py-0.5 rounded"
                         style={{ backgroundColor: '#f3e8ff', color: '#9333ea' }}
                       >
-                        Committed
+                        {commitEnrichments.length} file{commitEnrichments.length !== 1 ? 's' : ''}
                       </span>
                     </div>
+                  </div>
 
-                    {/* Expanded Details */}
-                    {isExpanded && (
-                      <div className="text-xs" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                  {Array.from(groups.entries()).map(([branchId, files]) => {
+                    const rep = files[0];
+                    const workspaceName = rep.task_name || rep.branch_name;
+
+                    return (
+                      <div key={branchId}>
+                        {/* Workspace sub-header */}
                         <div
-                          className="px-4 py-2 space-y-1 border-b"
-                          style={{ borderColor: 'var(--border-color)' }}
+                          className="flex items-center gap-2 px-4 py-2 border-b"
+                          style={{
+                            borderColor: 'var(--border-color)',
+                            backgroundColor: 'var(--bg-secondary)',
+                          }}
                         >
-                          <div style={{ color: 'var(--text-secondary)' }}>
-                            <span className="font-medium">Branch:</span> {commit.branch_name}
-                          </div>
-                          {commit.commit_sha && (
-                            <div style={{ color: 'var(--text-secondary)' }}>
-                              <span className="font-medium">Commit:</span>{' '}
-                              <code className="bg-gray-100 px-1 rounded">
-                                {commit.commit_sha.slice(0, 8)}
-                              </code>
-                            </div>
+                          <GitCommit size={13} className="text-purple-500 flex-shrink-0" />
+                          <span
+                            className="text-xs font-medium flex-1 truncate"
+                            style={{ color: 'var(--text-primary)' }}
+                          >
+                            {workspaceName}
+                          </span>
+                          <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                            {files.length} file{files.length !== 1 ? 's' : ''}
+                          </span>
+                          {spaceId && rep.pr_url && (
+                            <a
+                              href={rep.pr_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 px-2 py-0.5 text-xs rounded"
+                              style={{ backgroundColor: '#dbeafe', color: '#2563eb' }}
+                            >
+                              <ExternalLink size={11} />
+                              PR
+                            </a>
                           )}
-                          <div style={{ color: 'var(--text-secondary)' }}>
-                            Last updated: {new Date(commit.updated_at).toLocaleString()}
-                          </div>
-
-                          <div className="flex items-center gap-2 pt-2">
-                            {commit.pr_url ? (
-                              <a
-                                href={commit.pr_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-1 px-2 py-1 text-xs rounded"
-                                style={{ backgroundColor: '#dbeafe', color: '#2563eb' }}
-                              >
-                                <ExternalLink size={12} />
-                                View PR
-                              </a>
-                            ) : spaceId ? (
-                              <button
-                                className="flex items-center gap-1 px-2 py-1 text-xs rounded"
-                                style={{ backgroundColor: '#dbeafe', color: '#2563eb' }}
-                                disabled={isLoading}
-                                onClick={async () => {
-                                  setIsLoading(true);
-                                  try {
-                                    const result = await createPullRequest(spaceId);
-                                    onRefresh?.();
-                                    if (result.pr_url) {
-                                      window.open(result.pr_url, '_blank', 'noopener,noreferrer');
+                          {spaceId && !rep.pr_url && (
+                            <button
+                              disabled={isLoading}
+                              className="flex items-center gap-1 px-2 py-0.5 text-xs rounded disabled:opacity-50"
+                              style={{
+                                backgroundColor: 'var(--bg-primary)',
+                                color: 'var(--text-secondary)',
+                                border: '1px solid var(--border-color)',
+                              }}
+                              title="Move commits back to draft edits"
+                              onClick={() =>
+                                askConfirm(
+                                  `Move commits from "${workspaceName}" back to draft edits?`,
+                                  async () => {
+                                    setIsLoading(true);
+                                    try {
+                                      await unstageBranch(spaceId, branchId);
+                                      onRefresh?.();
+                                    } catch (err) {
+                                      console.error('Failed to unstage:', err);
+                                    } finally {
+                                      setIsLoading(false);
                                     }
-                                  } catch (err) {
-                                    console.error('Failed to create PR:', err);
-                                  } finally {
-                                    setIsLoading(false);
                                   }
-                                }}
-                              >
-                                <GitPullRequest size={12} />
-                                Create PR
-                              </button>
-                            ) : null}
-                          </div>
+                                )
+                              }
+                            >
+                              <GitCommit size={11} />
+                              Unstage
+                            </button>
+                          )}
                         </div>
 
-                        {/* Diff Hunks */}
-                        {commit.diff_hunks && commit.diff_hunks.length > 0 && (
-                          <div className="font-mono">
-                            {commit.diff_hunks.map((hunk, hunkIndex) => (
-                              <div key={hunkIndex}>
-                                <div
-                                  className="px-2 py-1 text-xs"
-                                  style={{ backgroundColor: '#f3e8ff', color: '#7c3aed' }}
-                                >
-                                  @@ -{hunk.old_start},{hunk.old_count} +{hunk.new_start},
-                                  {hunk.new_count} @@
-                                </div>
-                                <div className="text-xs">
-                                  {hunk.lines.map((line, lineIndex) => {
-                                    const isAddition = line.startsWith('+');
-                                    const isDeletion = line.startsWith('-');
-                                    const lineStyle = isAddition
-                                      ? { backgroundColor: '#dcfce7', color: '#166534' }
-                                      : isDeletion
-                                        ? { backgroundColor: '#fee2e2', color: '#991b1b' }
-                                        : {
-                                            backgroundColor: 'transparent',
-                                            color: 'var(--text-primary)',
-                                          };
+                        {/* Files in this workspace */}
+                        {files.map(commit => {
+                          const fileKey = `commit-${branchId}-${commit.file_path}`;
+                          const isExpanded = expandedFiles.has(fileKey);
+                          const isCurrentFile = commit.file_path === currentFilePath;
 
-                                    return (
-                                      <div
-                                        key={lineIndex}
-                                        className="px-2 py-0.5 whitespace-pre-wrap break-all"
-                                        style={lineStyle}
-                                      >
-                                        {line}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
+                          return (
+                            <div
+                              key={fileKey}
+                              className="border-b"
+                              style={{ borderColor: 'var(--border-color)' }}
+                            >
+                              <div
+                                className="flex items-center gap-2 px-4 py-2 cursor-pointer hover:bg-opacity-50"
+                                style={{
+                                  backgroundColor: isCurrentFile
+                                    ? 'var(--bg-secondary)'
+                                    : 'transparent',
+                                }}
+                                onClick={() => toggleExpanded(fileKey)}
+                              >
+                                <button className="p-0.5">
+                                  {isExpanded ? (
+                                    <ChevronDown
+                                      size={14}
+                                      style={{ color: 'var(--text-secondary)' }}
+                                    />
+                                  ) : (
+                                    <ChevronRight
+                                      size={14}
+                                      style={{ color: 'var(--text-secondary)' }}
+                                    />
+                                  )}
+                                </button>
+                                <GitCommit size={14} className="text-purple-600" />
+                                <span
+                                  className="flex-1 text-sm truncate cursor-pointer hover:underline"
+                                  style={{ color: 'var(--text-primary)' }}
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    onNavigateToFile?.(commit.file_path);
+                                  }}
+                                >
+                                  {commit.file_path}
+                                </span>
+                                {(commit.additions || commit.deletions) && (
+                                  <span
+                                    className="text-xs"
+                                    style={{ color: 'var(--text-secondary)' }}
+                                  >
+                                    <span className="text-green-600">+{commit.additions || 0}</span>
+                                    {' / '}
+                                    <span className="text-red-600">-{commit.deletions || 0}</span>
+                                  </span>
+                                )}
+                                <span
+                                  className="text-xs px-1.5 py-0.5 rounded"
+                                  style={{ backgroundColor: '#f3e8ff', color: '#9333ea' }}
+                                >
+                                  Committed
+                                </span>
                               </div>
-                            ))}
-                          </div>
-                        )}
+
+                              {isExpanded && (
+                                <div
+                                  className="text-xs"
+                                  style={{ backgroundColor: 'var(--bg-secondary)' }}
+                                >
+                                  <div
+                                    className="px-4 py-2 space-y-1 border-b"
+                                    style={{ borderColor: 'var(--border-color)' }}
+                                  >
+                                    {commit.commit_sha && (
+                                      <div style={{ color: 'var(--text-secondary)' }}>
+                                        <span className="font-medium">Commit:</span>{' '}
+                                        <code className="bg-gray-100 px-1 rounded">
+                                          {commit.commit_sha.slice(0, 8)}
+                                        </code>
+                                      </div>
+                                    )}
+                                    <div style={{ color: 'var(--text-secondary)' }}>
+                                      Last updated: {new Date(commit.updated_at).toLocaleString()}
+                                    </div>
+                                    {spaceId && !rep.pr_url && (
+                                      <div className="flex items-center gap-2 pt-1">
+                                        <button
+                                          className="flex items-center gap-1 px-2 py-1 text-xs rounded"
+                                          style={{ backgroundColor: '#dbeafe', color: '#2563eb' }}
+                                          disabled={isLoading}
+                                          onClick={async () => {
+                                            setIsLoading(true);
+                                            try {
+                                              const result = await createPullRequest(
+                                                spaceId,
+                                                branchId
+                                              );
+                                              onRefresh?.();
+                                              if (result.pr_url) {
+                                                window.open(
+                                                  result.pr_url,
+                                                  '_blank',
+                                                  'noopener,noreferrer'
+                                                );
+                                              }
+                                            } catch (err) {
+                                              console.error('Failed to create PR:', err);
+                                            } finally {
+                                              setIsLoading(false);
+                                            }
+                                          }}
+                                        >
+                                          <GitPullRequest size={12} />
+                                          Create PR
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                  {commit.diff_hunks && commit.diff_hunks.length > 0 && (
+                                    <div className="font-mono">
+                                      {commit.diff_hunks.map((hunk, hunkIndex) => (
+                                        <div key={hunkIndex}>
+                                          <div
+                                            className="px-2 py-1 text-xs"
+                                            style={{ backgroundColor: '#f3e8ff', color: '#7c3aed' }}
+                                          >
+                                            @@ -{hunk.old_start},{hunk.old_count} +{hunk.new_start},
+                                            {hunk.new_count} @@
+                                          </div>
+                                          <div className="text-xs">
+                                            {hunk.lines.map((line, lineIndex) => {
+                                              const isAddition = line.startsWith('+');
+                                              const isDeletion = line.startsWith('-');
+                                              return (
+                                                <div
+                                                  key={lineIndex}
+                                                  className="px-2 py-0.5 whitespace-pre-wrap break-all"
+                                                  style={
+                                                    isAddition
+                                                      ? {
+                                                          backgroundColor: '#dcfce7',
+                                                          color: '#166534',
+                                                        }
+                                                      : isDeletion
+                                                        ? {
+                                                            backgroundColor: '#fee2e2',
+                                                            color: '#991b1b',
+                                                          }
+                                                        : {
+                                                            backgroundColor: 'transparent',
+                                                            color: 'var(--text-primary)',
+                                                          }
+                                                  }
+                                                >
+                                                  {line}
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </>
-          )}
+                    );
+                  })}
+                </>
+              );
+            })()}
         </div>
       </div>
     </>

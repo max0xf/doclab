@@ -1,13 +1,5 @@
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  forwardRef,
-  useImperativeHandle,
-} from 'react';
+import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
 import {
-  GitBranch,
   GitCommit,
   GitPullRequest,
   Trash2,
@@ -23,15 +15,22 @@ import {
   Minus,
   Edit3,
   Loader2,
+  CheckCircle2,
+  Circle,
+  FolderGit2,
 } from 'lucide-react';
 import type { Space } from '../../types';
 import {
-  getBranchStatus,
+  getWorkspace,
+  createTask,
+  selectTask,
+  deleteTask,
   createPullRequest,
   discardBranch,
   unstageBranch,
   rebaseBranch,
-  type UserBranchInfo,
+  type UserTaskInfo,
+  type WorkspaceResponse,
 } from '../../services/userBranchApi';
 import { listDraftChanges, type DraftChangeListItem } from '../../services/draftChangeApi';
 import { ConfirmDialog } from '../common/ConfirmDialog';
@@ -52,12 +51,66 @@ interface SpaceWorkspaceBarProps {
   onNavigateToFile?: (filePath: string) => void;
 }
 
+// ── Task status badge ──────────────────────────────────────────────────────────
+
+function TaskStatusBadge({ task }: { task: UserTaskInfo }) {
+  if (task.conflict_files.length > 0) {
+    return (
+      <span
+        className="text-xs px-1.5 py-0.5 rounded font-medium"
+        style={{ backgroundColor: '#fff3e0', color: '#e65100' }}
+      >
+        conflict
+      </span>
+    );
+  }
+  if (task.status === 'pr_open') {
+    return (
+      <span
+        className="text-xs px-1.5 py-0.5 rounded font-medium"
+        style={{ backgroundColor: '#e8f5e9', color: '#2e7d32' }}
+      >
+        PR #{task.pr_id}
+      </span>
+    );
+  }
+  if (task.files_count > 0) {
+    return (
+      <span
+        className="text-xs px-1.5 py-0.5 rounded font-medium"
+        style={{ backgroundColor: '#e3f2fd', color: '#1565c0' }}
+      >
+        {task.files_count} file{task.files_count !== 1 ? 's' : ''}
+      </span>
+    );
+  }
+  if (task.draft_count > 0) {
+    return (
+      <span
+        className="text-xs px-1.5 py-0.5 rounded font-medium"
+        style={{ backgroundColor: '#f3e8ff', color: '#6b21a8' }}
+      >
+        {task.draft_count} draft{task.draft_count !== 1 ? 's' : ''}
+      </span>
+    );
+  }
+  return (
+    <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+      empty
+    </span>
+  );
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
+
 export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorkspaceBarProps>(
   function SpaceWorkspaceBar({ space, onRefresh, onNavigateToFile }, ref) {
-    const [draftCount, setDraftCount] = useState(0);
+    const [workspace, setWorkspace] = useState<WorkspaceResponse | null>(null);
     const [draftFiles, setDraftFiles] = useState<DraftChangeListItem[]>([]);
-    const [branch, setBranch] = useState<UserBranchInfo | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [showTaskDropdown, setShowTaskDropdown] = useState(false);
+    const [showNewTaskForm, setShowNewTaskForm] = useState(false);
+    const [newTaskName, setNewTaskName] = useState('');
     const [isDraftsExpanded, setIsDraftsExpanded] = useState(false);
     const [isCommittedExpanded, setIsCommittedExpanded] = useState(false);
     const [isConflictsExpanded, setIsConflictsExpanded] = useState(false);
@@ -66,12 +119,13 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
     const [prDescription, setPrDescription] = useState('');
     const [showPrForm, setShowPrForm] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [conflictFiles, setConflictFiles] = useState<string[]>([]);
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const [currentStep, setCurrentStep] = useState<string | null>(null);
     const [confirm, setConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null);
     const logsEndRef = useRef<HTMLDivElement>(null);
     const stepClearTimer = useRef<ReturnType<typeof setTimeout>>();
+    const dropdownRef = useRef<HTMLDivElement>(null);
+    const newTaskInputRef = useRef<HTMLInputElement>(null);
 
     const addLog = useCallback((message: string, level: LogEntry['level'] = 'info') => {
       const now = new Date();
@@ -83,7 +137,6 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
       });
       setLogs(prev => [...prev, { time, message, level }]);
       setCurrentStep(message);
-      // Auto-clear: keep info steps visible for 30s (long ops), clear success/error quickly
       if (stepClearTimer.current) {
         clearTimeout(stepClearTimer.current);
       }
@@ -93,22 +146,16 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
 
     useImperativeHandle(ref, () => ({ addLog }), [addLog]);
 
-    const loadStatus = useCallback(async () => {
+    const loadWorkspace = useCallback(async () => {
       try {
-        const [statusRes, drafts] = await Promise.all([
-          getBranchStatus(space.id),
+        const [ws, drafts] = await Promise.all([
+          getWorkspace(space.id),
           listDraftChanges(space.id),
         ]);
-        setDraftCount(statusRes.draft_count);
+        setWorkspace(ws);
         setDraftFiles(drafts);
-        setBranch(statusRes.branch);
-        if (statusRes.branch?.conflict_files?.length) {
-          setConflictFiles(statusRes.branch.conflict_files);
-        } else {
-          setConflictFiles([]);
-        }
       } catch {
-        // silent — bar will just stay hidden or stale
+        // silent
       }
     }, [space.id]);
 
@@ -116,10 +163,10 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
       if (!space.edit_enabled) {
         return;
       }
-      loadStatus();
-      const interval = setInterval(loadStatus, 30000);
+      loadWorkspace();
+      const interval = setInterval(loadWorkspace, 30000);
       return () => clearInterval(interval);
-    }, [space.edit_enabled, loadStatus]);
+    }, [space.edit_enabled, loadWorkspace]);
 
     useEffect(() => {
       if (isLogsExpanded && logsEndRef.current) {
@@ -127,40 +174,124 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
       }
     }, [logs, isLogsExpanded]);
 
-    if (!space.edit_enabled) {
+    // Close dropdown on outside click
+    useEffect(() => {
+      if (!showTaskDropdown) {
+        return;
+      }
+      const handler = (e: MouseEvent) => {
+        if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+          setShowTaskDropdown(false);
+        }
+      };
+      document.addEventListener('mousedown', handler);
+      return () => document.removeEventListener('mousedown', handler);
+    }, [showTaskDropdown]);
+
+    // Focus new task input when form opens
+    useEffect(() => {
+      if (showNewTaskForm) {
+        setTimeout(() => newTaskInputRef.current?.focus(), 50);
+      }
+    }, [showNewTaskForm]);
+
+    if (!space.edit_enabled || !workspace) {
       return null;
     }
 
-    if (draftCount === 0 && !branch) {
-      return null;
-    }
+    const tasks = workspace.tasks;
+    const selectedTask = tasks.find(t => t.id === workspace.selected_task_id) ?? null;
 
-    const hasConflicts = conflictFiles.length > 0;
-    const hasBranch = !!branch;
-    const isPrOpen = branch?.status === 'pr_open';
+    // Derive status from selected task
+    const hasConflicts = (selectedTask?.conflict_files?.length ?? 0) > 0;
+    const hasBranch = !!selectedTask?.last_commit_sha;
+    const isPrOpen = selectedTask?.status === 'pr_open';
 
     const askConfirm = (message: string, fn: () => void) => {
       setConfirm({ message, onConfirm: fn });
     };
 
-    const handleCreatePr = async () => {
-      if (!branch) {
+    // ── Handlers ──────────────────────────────────────────────────────────────
+
+    const handleCreateTask = async () => {
+      const name = newTaskName.trim();
+      if (!name) {
         return;
       }
       setIsLoading(true);
       setError(null);
-      addLog(`Creating pull request from branch ${branch.branch_name}…`);
+      try {
+        const task = await createTask(space.id, name);
+        addLog(`Created task "${task.name}" → branch ${task.branch_name}`, 'success');
+        setShowNewTaskForm(false);
+        setNewTaskName('');
+        await loadWorkspace();
+        onRefresh?.();
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Failed to create task';
+        setError(msg);
+        addLog(`Error: ${msg}`, 'error');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    const handleSelectTask = async (taskId: string) => {
+      setShowTaskDropdown(false);
+      if (taskId === workspace?.selected_task_id) {
+        return;
+      }
+      try {
+        await selectTask(taskId);
+        await loadWorkspace();
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Failed to select workspace';
+        setError(msg);
+      }
+    };
+
+    const handleDeleteWorkspace = (task: UserTaskInfo) => {
+      setShowTaskDropdown(false);
+      askConfirm(
+        `Delete workspace "${task.name}"? All drafts associated with it will be removed.`,
+        async () => {
+          setIsLoading(true);
+          setError(null);
+          try {
+            await deleteTask(task.id);
+            addLog(`Deleted workspace "${task.name}"`, 'success');
+            await loadWorkspace();
+            onRefresh?.();
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Failed to delete workspace';
+            setError(msg);
+            addLog(`Error: ${msg}`, 'error');
+          } finally {
+            setIsLoading(false);
+          }
+        }
+      );
+    };
+
+    const handleCreatePr = async () => {
+      if (!selectedTask) {
+        return;
+      }
+      setIsLoading(true);
+      setError(null);
+      addLog(`Creating pull request from ${selectedTask.branch_name}…`);
       try {
         const result = await createPullRequest(
           space.id,
-          prTitle || undefined,
+          selectedTask.id,
+          prTitle || selectedTask.name || undefined,
           prDescription || undefined
         );
         setShowPrForm(false);
         setPrTitle('');
         setPrDescription('');
-        addLog(`PR created successfully${result.pr_url ? ` → ${result.pr_url}` : ''}`, 'success');
-        await loadStatus();
+        addLog(`PR created${result.pr_url ? ` → ${result.pr_url}` : ''}`, 'success');
+        await loadWorkspace();
         onRefresh?.();
         if (result.pr_url) {
           window.open(result.pr_url, '_blank', 'noopener,noreferrer');
@@ -176,19 +307,18 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
 
     const handleDiscard = () => {
       askConfirm(
-        `Discard all commits on branch "${branch?.branch_name}"? This cannot be undone.`,
+        `Discard all commits on workspace "${selectedTask?.name || selectedTask?.branch_name}"? This cannot be undone.`,
         async () => {
           setIsLoading(true);
           setError(null);
-          addLog(`Resetting branch ${branch?.branch_name} to base (${branch?.base_branch})…`);
+          addLog(`Resetting ${selectedTask?.branch_name} to base…`);
           try {
-            addLog('Running git reset --hard and force-pushing…');
-            await discardBranch(space.id);
-            addLog('Branch discarded — all commits removed', 'success');
-            await loadStatus();
+            await discardBranch(space.id, selectedTask?.id);
+            addLog('Branch discarded', 'success');
+            await loadWorkspace();
             onRefresh?.();
           } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : 'Failed to discard branch';
+            const msg = err instanceof Error ? err.message : 'Failed to discard';
             setError(msg);
             addLog(`Error: ${msg}`, 'error');
           } finally {
@@ -202,18 +332,14 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
       askConfirm('Move all commits back to draft edits? The branch will be reset.', async () => {
         setIsLoading(true);
         setError(null);
-        addLog(`Unstaging commits from ${branch?.branch_name}…`);
+        addLog(`Unstaging commits from ${selectedTask?.branch_name}…`);
         try {
-          addLog('Running soft reset and converting commits to draft edits…');
-          const result = await unstageBranch(space.id);
-          addLog(
-            `Unstaged ${result.unstaged_files.length} file(s) → now appear as draft edits`,
-            'success'
-          );
-          await loadStatus();
+          const result = await unstageBranch(space.id, selectedTask?.id);
+          addLog(`Unstaged ${result.unstaged_files.length} file(s)`, 'success');
+          await loadWorkspace();
           onRefresh?.();
         } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : 'Failed to unstage branch';
+          const msg = err instanceof Error ? err.message : 'Failed to unstage';
           setError(msg);
           addLog(`Error: ${msg}`, 'error');
         } finally {
@@ -225,17 +351,16 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
     const handleRebase = async () => {
       setIsLoading(true);
       setError(null);
-      addLog(`Rebasing ${branch?.branch_name} onto origin/${branch?.base_branch}…`);
+      addLog(`Rebasing ${selectedTask?.branch_name}…`);
       try {
-        await rebaseBranch(space.id);
-        setConflictFiles([]);
-        addLog('Rebase successful — branch is up to date', 'success');
-        await loadStatus();
+        await rebaseBranch(space.id, selectedTask?.id);
+        addLog('Rebase successful', 'success');
+        await loadWorkspace();
         onRefresh?.();
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'Rebase failed';
         if (msg.includes('rebase_conflict')) {
-          addLog('Rebase conflict detected — resolve conflicts and rebase again', 'error');
+          addLog('Rebase conflict — resolve and rebase again', 'error');
         } else {
           addLog(`Error: ${msg}`, 'error');
         }
@@ -245,14 +370,15 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
       }
     };
 
+    // ── Styles ──────────────────────────────────────────────────────────────────
+
     const barColor = hasConflicts
       ? '#fff3e0'
       : isPrOpen
         ? '#e8f5e9'
         : hasBranch
           ? '#e3f2fd'
-          : '#f5f5f5';
-
+          : '#f9f9f9';
     const borderColor = hasConflicts
       ? '#ff9800'
       : isPrOpen
@@ -270,6 +396,11 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
       }
       return <Edit3 size={11} style={{ color: '#2563eb' }} />;
     };
+
+    // Drafts for the selected task
+    const selectedTaskDrafts = selectedTask
+      ? draftFiles.filter(d => d.branch_id === selectedTask.id)
+      : draftFiles.filter(d => !d.branch_id);
 
     return (
       <>
@@ -292,94 +423,225 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
             padding: '8px 16px',
           }}
         >
-          {/* Main bar row */}
+          {/* ── Row 1: Task selector ─────────────────────────────────────────── */}
           <div className="flex items-center gap-3 flex-wrap">
-            {/* Status icon + label */}
-            <div className="flex items-center gap-2">
-              {hasConflicts ? (
-                <AlertTriangle size={16} style={{ color: '#e65100' }} />
-              ) : (
-                <GitBranch size={16} style={{ color: '#1976d2' }} />
-              )}
+            <FolderGit2 size={15} style={{ color: '#1976d2', flexShrink: 0 }} />
 
-              {/* Draft count — clickable to expand list */}
-              {!hasBranch && draftCount > 0 ? (
-                <button
-                  onClick={() => setIsDraftsExpanded(v => !v)}
-                  className="flex items-center gap-1 text-sm font-medium hover:underline"
+            {/* Task selector button */}
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => {
+                  setShowTaskDropdown(v => !v);
+                  setShowNewTaskForm(false);
+                }}
+                className="flex items-center gap-1.5 text-sm font-medium px-2 py-1 rounded hover:opacity-80"
+                style={{
+                  backgroundColor: 'rgba(0,0,0,0.06)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid rgba(0,0,0,0.12)',
+                }}
+              >
+                {selectedTask ? (
+                  <>
+                    <span className="truncate" style={{ maxWidth: 180 }}>
+                      {selectedTask.name || selectedTask.branch_name}
+                    </span>
+                    <TaskStatusBadge task={selectedTask} />
+                  </>
+                ) : (
+                  <span style={{ color: 'var(--text-secondary)' }}>Select workspace…</span>
+                )}
+                <ChevronDown size={12} />
+              </button>
+
+              {/* Dropdown */}
+              {showTaskDropdown && (
+                <div
+                  className="absolute top-full left-0 mt-1 rounded border shadow-lg z-50"
                   style={{
-                    color: 'var(--text-primary)',
-                    background: 'none',
-                    border: 'none',
-                    padding: 0,
-                    cursor: 'pointer',
+                    backgroundColor: 'var(--bg-primary)',
+                    borderColor: 'var(--border-color)',
+                    minWidth: 280,
                   }}
                 >
-                  {draftCount} draft change{draftCount !== 1 ? 's' : ''}
-                  {isDraftsExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                </button>
-              ) : (
-                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                  {hasConflicts
-                    ? 'Merge conflict'
-                    : isPrOpen
-                      ? 'PR open'
-                      : `Branch: ${branch!.branch_name}`}
-                </span>
-              )}
-
-              {hasBranch && branch!.files_count > 0 && (
-                <button
-                  onClick={() => setIsCommittedExpanded(v => !v)}
-                  className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded hover:opacity-80"
-                  style={{
-                    backgroundColor: isCommittedExpanded ? 'rgba(0,0,0,0.14)' : 'rgba(0,0,0,0.08)',
-                    color: 'var(--text-secondary)',
-                    border: 'none',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {branch!.files_count} file{branch!.files_count !== 1 ? 's' : ''}
-                  {isCommittedExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-                </button>
-              )}
-
-              {draftCount > 0 && hasBranch && (
-                <button
-                  onClick={() => setIsDraftsExpanded(v => !v)}
-                  className="flex items-center gap-1 text-xs hover:underline"
-                  style={{
-                    color: 'var(--text-secondary)',
-                    background: 'none',
-                    border: 'none',
-                    padding: 0,
-                    cursor: 'pointer',
-                  }}
-                >
-                  + {draftCount} draft{draftCount !== 1 ? 's' : ''}
-                  {isDraftsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                </button>
-              )}
-
-              {/* Inline progress indicator — spinner always shown while loading */}
-              {(isLoading || currentStep) && (
-                <span
-                  className="flex items-center gap-1 text-xs"
-                  style={{ color: 'var(--text-secondary)' }}
-                >
-                  {isLoading && <Loader2 size={12} className="animate-spin" />}
-                  {currentStep}
-                </span>
+                  {tasks.length > 0 && (
+                    <div className="py-1">
+                      {tasks.map(task => (
+                        <div
+                          key={task.id}
+                          className="flex items-center gap-1 px-2"
+                          style={{
+                            backgroundColor:
+                              task.id === workspace.selected_task_id
+                                ? 'rgba(25,118,210,0.08)'
+                                : 'transparent',
+                          }}
+                        >
+                          <button
+                            onClick={() => handleSelectTask(task.id)}
+                            className="flex-1 flex items-center gap-2 py-2 text-sm text-left hover:opacity-80"
+                            style={{ color: 'var(--text-primary)', minWidth: 0 }}
+                          >
+                            {task.id === workspace.selected_task_id ? (
+                              <CheckCircle2 size={14} style={{ color: '#1976d2', flexShrink: 0 }} />
+                            ) : (
+                              <Circle
+                                size={14}
+                                style={{ color: 'var(--text-secondary)', flexShrink: 0 }}
+                              />
+                            )}
+                            <span className="truncate flex-1">{task.name || task.branch_name}</span>
+                            <TaskStatusBadge task={task} />
+                          </button>
+                          {task.name !== 'Default' && (
+                            <button
+                              onClick={e => {
+                                e.stopPropagation();
+                                handleDeleteWorkspace(task);
+                              }}
+                              className="p-1 rounded hover:opacity-80 flex-shrink-0"
+                              style={{ color: 'var(--text-secondary)' }}
+                              title="Delete workspace"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div
+                    className="border-t px-3 py-2"
+                    style={{ borderColor: 'var(--border-color)' }}
+                  >
+                    {showNewTaskForm ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          ref={newTaskInputRef}
+                          type="text"
+                          value={newTaskName}
+                          onChange={e => setNewTaskName(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              handleCreateTask();
+                            }
+                            if (e.key === 'Escape') {
+                              setShowNewTaskForm(false);
+                              setNewTaskName('');
+                            }
+                          }}
+                          placeholder="Workspace name…"
+                          className="flex-1 px-2 py-1 text-xs rounded border"
+                          style={{
+                            borderColor: 'var(--border-color)',
+                            backgroundColor: 'var(--bg-primary)',
+                            color: 'var(--text-primary)',
+                          }}
+                        />
+                        <button
+                          onClick={handleCreateTask}
+                          disabled={isLoading || !newTaskName.trim()}
+                          className="px-2 py-1 text-xs rounded disabled:opacity-50"
+                          style={{ backgroundColor: '#1976d2', color: 'white' }}
+                        >
+                          {isLoading ? <Loader2 size={11} className="animate-spin" /> : 'Create'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowNewTaskForm(false);
+                            setNewTaskName('');
+                          }}
+                          className="text-xs"
+                          style={{ color: 'var(--text-secondary)' }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setShowNewTaskForm(true)}
+                        className="flex items-center gap-1.5 text-xs hover:opacity-80"
+                        style={{ color: '#1976d2' }}
+                      >
+                        <Plus size={12} />
+                        New workspace
+                      </button>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
+
+            {/* Quick "new task" shortcut when no tasks exist */}
+            {tasks.length === 0 && !showNewTaskForm && (
+              <button
+                onClick={() => {
+                  setShowNewTaskForm(true);
+                  setShowTaskDropdown(true);
+                }}
+                className="flex items-center gap-1 text-xs px-2 py-1 rounded"
+                style={{ backgroundColor: '#1976d2', color: 'white' }}
+              >
+                <Plus size={12} />
+                New task
+              </button>
+            )}
+
+            {/* Inline file/draft counters for selected task */}
+            {selectedTask && (
+              <>
+                {hasBranch && selectedTask.files_count > 0 && (
+                  <button
+                    onClick={() => setIsCommittedExpanded(v => !v)}
+                    className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded hover:opacity-80"
+                    style={{
+                      backgroundColor: isCommittedExpanded
+                        ? 'rgba(0,0,0,0.14)'
+                        : 'rgba(0,0,0,0.08)',
+                      color: 'var(--text-secondary)',
+                    }}
+                  >
+                    {selectedTask.files_count} file{selectedTask.files_count !== 1 ? 's' : ''}
+                    {isCommittedExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                  </button>
+                )}
+                {selectedTask.draft_count > 0 && (
+                  <button
+                    onClick={() => setIsDraftsExpanded(v => !v)}
+                    className="flex items-center gap-1 text-xs hover:underline"
+                    style={{
+                      color: 'var(--text-secondary)',
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    + {selectedTask.draft_count} draft{selectedTask.draft_count !== 1 ? 's' : ''}
+                    {isDraftsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                  </button>
+                )}
+              </>
+            )}
+
+            {/* Inline spinner */}
+            {(isLoading || currentStep) && (
+              <span
+                className="flex items-center gap-1 text-xs"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                {isLoading && <Loader2 size={12} className="animate-spin" />}
+                {currentStep}
+              </span>
+            )}
 
             <div className="flex-1" />
 
             {/* Action buttons */}
             <div className="flex items-center gap-2">
-              {isPrOpen && branch?.pr_url && (
+              {selectedTask?.pr_url && (
                 <a
-                  href={branch.pr_url}
+                  href={selectedTask.pr_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1 px-2 py-1 text-xs rounded"
@@ -390,7 +652,7 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
                 </a>
               )}
 
-              {hasBranch && !isPrOpen && !hasConflicts && (
+              {hasBranch && !selectedTask?.pr_url && !hasConflicts && (
                 <button
                   onClick={() => setShowPrForm(v => !v)}
                   disabled={isLoading}
@@ -448,10 +710,12 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
                 <button
                   onClick={() => setIsConflictsExpanded(v => !v)}
                   className="flex items-center gap-1 px-2 py-1 text-xs rounded"
-                  style={{ color: 'var(--text-secondary)' }}
+                  style={{ color: '#e65100' }}
                 >
+                  <AlertTriangle size={12} />
+                  {selectedTask!.conflict_files.length} conflict
+                  {selectedTask!.conflict_files.length !== 1 ? 's' : ''}
                   {isConflictsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                  {conflictFiles.length} conflict{conflictFiles.length !== 1 ? 's' : ''}
                 </button>
               )}
 
@@ -472,7 +736,7 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
             </div>
           </div>
 
-          {/* Error message */}
+          {/* ── Error ──────────────────────────────────────────────────────────── */}
           {error && (
             <div
               className="mt-2 text-xs px-2 py-1 rounded"
@@ -485,17 +749,17 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
             </div>
           )}
 
-          {/* Draft files list */}
-          {isDraftsExpanded && draftFiles.length > 0 && (
+          {/* ── Draft files for selected task ──────────────────────────────────── */}
+          {isDraftsExpanded && selectedTaskDrafts.length > 0 && (
             <div
               className="mt-2 rounded border overflow-hidden"
               style={{ borderColor: 'var(--border-color)' }}
             >
-              {draftFiles.map(draft => (
+              {selectedTaskDrafts.map(draft => (
                 <button
                   key={draft.id}
                   onClick={() => onNavigateToFile?.(draft.file_path)}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:opacity-80 transition-opacity border-b last:border-b-0"
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:opacity-80 border-b last:border-b-0"
                   style={{
                     backgroundColor: 'var(--bg-primary)',
                     borderColor: 'var(--border-color)',
@@ -509,7 +773,7 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
                   {draft.description && (
                     <span
                       className="truncate"
-                      style={{ color: 'var(--text-secondary)', maxWidth: '200px' }}
+                      style={{ color: 'var(--text-secondary)', maxWidth: 200 }}
                     >
                       {draft.description}
                     </span>
@@ -519,13 +783,12 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
             </div>
           )}
 
-          {/* Committed files list */}
-          {isCommittedExpanded && branch && (branch.files || []).length > 0 && (
+          {/* ── Committed files for selected task ─────────────────────────────── */}
+          {isCommittedExpanded && selectedTask && (selectedTask.files || []).length > 0 && (
             <div
               className="mt-2 rounded border overflow-hidden"
               style={{ borderColor: 'var(--border-color)' }}
             >
-              {/* Header row with branch-level actions */}
               <div
                 className="flex items-center gap-2 px-3 py-1.5 border-b"
                 style={{
@@ -534,12 +797,12 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
                 }}
               >
                 <span
-                  className="text-xs font-medium flex-1"
+                  className="text-xs font-mono flex-1 truncate"
                   style={{ color: 'var(--text-secondary)' }}
                 >
-                  {branch.branch_name}
+                  {selectedTask.branch_name}
                 </span>
-                {!isPrOpen && (
+                {!selectedTask.pr_url && (
                   <button
                     disabled={isLoading}
                     onClick={() => setShowPrForm(v => !v)}
@@ -559,18 +822,15 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
                     color: 'var(--text-secondary)',
                     border: '1px solid var(--border-color)',
                   }}
-                  title="Move all commits back to draft edits"
                 >
                   <RotateCcw size={11} />
                   Unstage
                 </button>
               </div>
-
-              {/* File rows */}
-              {(branch.files || []).map(filePath => (
+              {(selectedTask.files || []).map(filePath => (
                 <div
                   key={filePath}
-                  className="flex items-center gap-2 px-3 py-1.5 border-b last:border-b-0 group"
+                  className="flex items-center gap-2 px-3 py-1.5 border-b last:border-b-0"
                   style={{
                     backgroundColor: 'var(--bg-primary)',
                     borderColor: 'var(--border-color)',
@@ -595,13 +855,13 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
             </div>
           )}
 
-          {/* Conflict file list */}
-          {isConflictsExpanded && conflictFiles.length > 0 && (
+          {/* ── Conflicts ──────────────────────────────────────────────────────── */}
+          {isConflictsExpanded && selectedTask && selectedTask.conflict_files.length > 0 && (
             <div className="mt-2 text-xs space-y-1">
               <div className="font-medium" style={{ color: '#e65100' }}>
                 Files with conflicts — resolve and rebase:
               </div>
-              {conflictFiles.map(f => (
+              {selectedTask.conflict_files.map(f => (
                 <div
                   key={f}
                   className="flex items-center gap-1 font-mono"
@@ -614,7 +874,7 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
             </div>
           )}
 
-          {/* Operation log panel — collapsed by default, expanded via Log button */}
+          {/* ── Operation log ──────────────────────────────────────────────────── */}
           {isLogsExpanded && logs.length > 0 && (
             <div
               className="mt-2 rounded border overflow-hidden"
@@ -638,7 +898,7 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
               </div>
               <div
                 className="font-mono text-xs overflow-y-auto"
-                style={{ backgroundColor: '#1e1e1e', maxHeight: '120px', padding: '4px 8px' }}
+                style={{ backgroundColor: '#1e1e1e', maxHeight: 120, padding: '4px 8px' }}
               >
                 {logs.map((entry, i) => (
                   <div key={i} className="flex gap-2 leading-5">
@@ -662,20 +922,22 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
             </div>
           )}
 
-          {/* PR creation form */}
+          {/* ── PR creation form ───────────────────────────────────────────────── */}
           {showPrForm && (
             <div
               className="mt-3 p-3 rounded border space-y-2"
               style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-color)' }}
             >
               <div className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-                Create Pull Request
+                Create Pull Request {selectedTask?.name ? `— ${selectedTask.name}` : ''}
               </div>
               <input
                 type="text"
                 value={prTitle}
                 onChange={e => setPrTitle(e.target.value)}
-                placeholder="Title (optional — auto-generated if blank)"
+                placeholder={
+                  selectedTask?.name ? `${selectedTask.name} (auto)` : 'Title (optional)'
+                }
                 className="w-full px-2 py-1 text-xs rounded border"
                 style={{
                   borderColor: 'var(--border-color)',

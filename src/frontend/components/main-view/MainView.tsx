@@ -502,10 +502,7 @@ function FileBrowserView({
         const mappingsData = await fileMappingApi.list(space.slug);
         const mappingsMap = new Map<string, FileMapping>();
         mappingsData.forEach(m => {
-          mappingsMap.set(m.file_path, m);
-          if (m.file_path.includes('TEST') || m.file_path === 'TEST') {
-            console.log('[Mappings] TEST file mapping:', m);
-          }
+          mappingsMap.set(m.file_path.replace(/\/$/, ''), m);
         });
         console.log('[Mappings] Loaded', mappingsData.length, 'mappings');
         console.log('[Mappings] All mapping paths:', Array.from(mappingsMap.keys()));
@@ -760,7 +757,7 @@ function FileContentView({
         const mappingsData = await fileMappingApi.list(space.slug);
         const mappingsMap = new Map<string, FileMapping>();
         mappingsData.forEach(m => {
-          mappingsMap.set(m.file_path, m);
+          mappingsMap.set(m.file_path.replace(/\/$/, ''), m);
         });
         setMappings(mappingsMap);
       } catch (error) {

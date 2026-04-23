@@ -301,9 +301,31 @@ export class VirtualContentBuilder {
 
   // --- Conflict helpers ---
 
+  /**
+   * Returns the original-file line numbers that are actually deleted/modified
+   * by a hunk (i.e. lines prefixed with `-`). Context lines (` `) and
+   * insertions (`+`) are excluded because they don't claim ownership of any
+   * original line — two enrichments may freely share context overlap.
+   */
+  private changedOriginalLines(hunk: any): number[] {
+    const changed: number[] = [];
+    let oldLine: number = hunk.old_start;
+    for (const line of (hunk.lines as string[] | undefined) ?? []) {
+      if (line.startsWith('+')) {
+        // insertion — no original line consumed
+      } else if (line.startsWith('-')) {
+        changed.push(oldLine);
+        oldLine++;
+      } else {
+        // context — advance old-line counter but don't claim
+        oldLine++;
+      }
+    }
+    return changed;
+  }
+
   private checkHunkConflict(hunk: any): Enrichment | null {
-    const rangeEnd = hunk.old_start + Math.max(hunk.old_count - 1, 0);
-    for (let ln = hunk.old_start; ln <= rangeEnd; ln++) {
+    for (const ln of this.changedOriginalLines(hunk)) {
       const existing = this.claimedRanges.get(ln);
       if (existing) {
         return existing;
@@ -313,8 +335,7 @@ export class VirtualContentBuilder {
   }
 
   private claimHunkRange(hunk: any, enrichment: Enrichment): void {
-    const rangeEnd = hunk.old_start + Math.max(hunk.old_count - 1, 0);
-    for (let ln = hunk.old_start; ln <= rangeEnd; ln++) {
+    for (const ln of this.changedOriginalLines(hunk)) {
       this.claimedRanges.set(ln, enrichment);
     }
   }
@@ -324,11 +345,14 @@ export class VirtualContentBuilder {
     secondEnrichment: Enrichment,
     hunk: any
   ): Enrichment {
+    const changed = this.changedOriginalLines(hunk);
+    const lineStart = changed.length > 0 ? changed[0] : hunk.old_start;
+    const lineEnd = changed.length > 0 ? changed[changed.length - 1] : hunk.old_start;
     return {
       id: `conflict-${this.nextConflictId++}`,
       type: EnrichmentType.CONFLICT,
-      lineStart: hunk.old_start,
-      lineEnd: hunk.old_start + Math.max(hunk.old_count - 1, 0),
+      lineStart,
+      lineEnd,
       data: {
         firstEnrichment,
         secondEnrichment,

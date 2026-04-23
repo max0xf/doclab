@@ -41,7 +41,7 @@ export default function FileMappingConfiguration({
         // Load mappings
         const mappingsData = await fileMappingApi.list(space.slug);
         const mappingsMap = new Map<string, FileMapping>();
-        mappingsData.forEach(m => mappingsMap.set(m.file_path, m));
+        mappingsData.forEach(m => mappingsMap.set(m.file_path.replace(/\/$/, ''), m));
         setMappings(mappingsMap);
       } catch (error) {
         console.error('Failed to load data:', error);
@@ -89,7 +89,7 @@ export default function FileMappingConfiguration({
     try {
       const mappingsData = await fileMappingApi.list(space.slug);
       const mappingsMap = new Map<string, FileMapping>();
-      mappingsData.forEach(m => mappingsMap.set(m.file_path, m));
+      mappingsData.forEach(m => mappingsMap.set(m.file_path.replace(/\/$/, ''), m));
       setMappings(mappingsMap);
     } catch (error) {
       console.error('Failed to reload mappings:', error);

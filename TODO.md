@@ -3,33 +3,61 @@
 ## 🔴 HIGH PRIORITY - PoC Use Cases
 
 ### 1. Edit of Rendered File with Commit/PR Creation
-**Status:** Partial - Edit mode works, Git commit/PR creation not implemented
+**Status:** Complete ✅ (git workflow fully implemented)
 
 **Completed:**
 - [x] VirtualContent architecture foundation
-- [x] User changes tracking (pending changes stored)
+- [x] User changes tracking (UserDraftChange model)
 - [x] Diff generation for changes
 - [x] Edit mode toggle UI (Edit button in FileViewerHeader)
 - [x] Plain text editing for all file types
 - [x] Save dialog with description prompt
 - [x] Unsaved changes warning on cancel
-- [x] Approve/reject backend actions (views_user_changes.py:67-90)
-- [x] Frontend API for user changes (userChangesApi.ts)
+- [x] Draft change → commit → git push flow
+  - `views_draft_changes.py`: applies changes, commits via worktree, pushes to fork
+  - `worktree_manager.py`: `commit_changes_sync()`, `push_branch_sync()` — real git operations
+- [x] Fork branch management (UserBranch model)
+  - Branch creation from upstream/master (bare repo or local path)
+  - Upstream remote setup for correct diff base
+- [x] Create PR from committed branch
+  - `views_user_branch.py create_pr()`: calls `bitbucket_server.create_pull_request()` (real API)
+  - Stores PR ID/URL, updates branch status to PR_OPEN
+  - Clears PR cache so new PR enrichment appears immediately
+- [x] Rebase branch onto upstream
+  - `views_user_branch.py rebase()`: real git rebase with conflict detection
+  - Returns 409 with conflict files on rebase conflict
+- [x] Unstage (soft reset to draft changes)
+  - `views_user_branch.py unstage()`: soft reset + convert commits back to draft changes
+- [x] Discard all changes (hard reset)
+  - `views_user_branch.py discard()`: hard reset + force push to clean fork branch
+- [x] SpaceWorkspaceBar UI — all actions wired:
+  - Commit (with log feedback), Create PR, Rebase, Unstage, Discard
+  - Real-time branch status (file count, draft count, conflict indicator)
+  - Spinner and step logging with timeouts
+- [x] Commit/PR enrichments in file viewer
+  - `CommitEnrichmentProvider`: shows commit diff inline (ACTIVE branches only)
+  - `PREnrichmentProvider`: shows PR diff inline (detected from Bitbucket)
+  - Deduplication: commit enrichment hidden when PR already covers same branch
+- [x] Conflict detection and display
+  - VirtualContentBuilder detects line-level conflicts between PR/commit/edit diffs
+  - Conflict lines highlighted with amber background
+  - Single compact AlertTriangle badge (with count) per conflict block
+  - Click opens ConflictDetailsDialog (shows winner vs blocked enrichment)
 
 **Remaining:**
 - [ ] Visual/WYSIWYG editor for Markdown
-  - Currently only plain text editing
-  - Need: Rich text editor (e.g., TipTap, ProseMirror)
-- [ ] Git commit creation from approved changes
-  - File: `src/backend/src/wiki/views_user_changes.py:100-108`
-  - Currently just marks as 'committed' without actual Git commit
-  - Need: Call BitbucketServerProvider.create_commit()
-- [ ] PR creation workflow
-  - Backend: Add `create_pull_request()` to BitbucketServerProvider (currently raises NotImplementedError at line 516)
-  - Backend: Add `create_pr` action to UserChangeViewSet
-  - Frontend: Add "Create PR" button in diff view
-- [ ] Connect frontend approve/reject buttons to backend API
-  - DiffViewer has Accept/Reject buttons but handlers just log to console
+  - `MarkdownContentWidget.tsx` is a stub — renders raw text in `<textarea>` only
+  - No TipTap, ProseMirror, or any rich text library integrated
+  - Need: Real markdown WYSIWYG editor
+- [ ] Conflict resolution actions
+  - `ConflictDetailsDialog.tsx` shows conflicts but has no "choose this version" button
+  - `ConflictResolutionWidget.tsx` has choose buttons but is dead code (never rendered)
+  - Need: Wire up resolution choice → update draft change / apply winning enrichment
+- [ ] Connect old approve/reject buttons
+  - `views_user_changes.py approve()/reject()`: updates DB status only, no git operation
+  - `commit_batch()`: has `# TODO: Implement Git commit logic` comment, marks committed in DB only
+  - These are legacy — new system uses UserDraftChange → UserBranch → commit instead
+  - Either remove or connect to new flow
 
 ---
 
@@ -37,12 +65,14 @@
 **Status:** Complete ✅
 
 **Completed:**
-- [x] PR diff enrichment provider
-- [x] Inline PR diff rendering with virtual content
-- [x] PR badges on changed lines
-- [x] Multiple PR support with filtering
+- [x] PR diff enrichment provider (fetches all open PRs, filters by file)
+- [x] Inline PR diff rendering with virtual content layering
+- [x] PR badges on changed lines (PR number, color-coded additions/deletions)
+- [x] Multiple PR support (all open PRs shown simultaneously)
 - [x] Diff hunks with additions/deletions visualization
-- [x] PR metadata display (number, title, author, state)
+- [x] PR metadata display (number, title, author, state, URL)
+- [x] `from_branch` field on pr_diff enrichments (for commit deduplication)
+- [x] Empty-diff cache invalidation (retries after PR creation)
 
 ---
 
@@ -95,259 +125,198 @@
 - [x] Frontend FileMappingConfigPanel and FileMappingConfiguration components
 - [x] Frontend fileMappingApi.ts service
 - [x] FileTree and SpaceTree integration with display names
-
-**Remaining:**
-- [ ] Breadcrumb navigation with custom names (currently shows file path)
+- [x] Breadcrumb with custom mapped names (MainView.tsx builds mapped breadcrumb path)
 
 ---
 
 ### 6. Preview/Edit for Markdown, Drawio, and Mermaid
-**Status:** Minimal - Only plain text view, no visual editing or enrichments
+**Status:** Not Implemented ❌
 
 **Markdown:**
-- [x] Basic markdown rendering (react-markdown)
-- [ ] Enrichments in rendered markdown view
-  - Comments and diffs don't show in rendered markdown
-  - Only work in plain text view
+- [x] Code block syntax highlighting (in plain text mode)
+- [x] Tables (in plain text mode — visible as raw syntax only)
+- [x] Links (in plain text mode)
+- [ ] Actual markdown rendering (visual mode)
+  - `MarkdownContentWidget.tsx` is a stub — displays raw text in `<pre>` tags
+  - `ViewMode.VISUAL` enum and tab exist in UI but render same plain text widget
+  - Need: Integrate react-markdown or similar and connect to Visual tab
+- [ ] Enrichments (comments, PR diffs) in rendered markdown view
+  - Currently enrichments only work in plain text mode
 - [ ] Visual/WYSIWYG editor for markdown
-  - Currently only plain text editing
-  - Need: Rich text editor (e.g., TipTap, ProseMirror)
-- [ ] Live preview mode
-  - Edit and preview side-by-side
-- [ ] Advanced markdown features
-  - [ ] Task lists (checkboxes)
-  - [ ] Footnotes
-  - [ ] Definition lists
-  - [x] Code block syntax highlighting
-  - [x] Tables
-  - [x] Links
+  - Need: Rich text editor (TipTap, ProseMirror)
+- [ ] Live preview mode (edit and preview side-by-side)
 
 **Drawio:**
 - [ ] Drawio file detection (.drawio, .drawio.xml)
 - [ ] Plain text edit mode for .drawio XML
-- [ ] Syntax highlighting for XML
 - [ ] Visual preview of diagrams
-  - Render drawio diagrams in view mode
-- [ ] Future: Visual editor integration (drawio embed)
+- [ ] Future: Visual editor integration
 
 **Mermaid:**
 - [ ] Mermaid diagram detection in markdown (```mermaid blocks)
-- [ ] Mermaid rendering in preview
-  - Use mermaid.js library
-- [ ] Plain text edit for mermaid blocks
+- [ ] Mermaid rendering (mermaid.js library)
 - [ ] Live diagram preview while editing
-- [ ] Support for all mermaid diagram types
-  - Flowcharts, sequence diagrams, class diagrams, etc.
 
 **Code Files (YAML, XML, JSON, etc.):**
 - [x] Syntax highlighting for common formats
 - [x] Plain text viewing
 - [x] Line numbers
-- [ ] Code folding support (not implemented)
-- [ ] Plain text editing (exists but not tested)
+- [ ] Code folding support
 - [ ] Schema validation (YAML, JSON)
-- [ ] Auto-formatting
 
 ---
 
 ### 7. Integration with Jira
-**Status:** Not Started
+**Status:** Frontend placeholder only ❌
 
-**Requirements:**
+- [x] JIRA service token type defined in frontend UI (Configuration/index.tsx)
+- [ ] Backend JIRA provider (zero implementation — no `jira.py` provider file)
 - [ ] Jira issue link detection in markdown
-- [ ] Jira API integration
-  - Backend: Add Jira provider
-  - Config: Jira URL, credentials, project keys
-- [ ] Issue status display
-  - Fetch issue metadata (status, assignee, priority)
-  - Render as rich links with status badges
-- [ ] Confluence-like rendering
-  - Issue key → clickable link with tooltip
-  - Status indicator (To Do, In Progress, Done)
-  - Assignee avatar/name
+- [ ] Issue status/assignee/priority fetching from Jira API
+- [ ] Rich link rendering with status badges
 - [ ] Caching of Jira data
-  - Cache issue metadata to reduce API calls
-  - Refresh on demand or periodic sync
 
 ---
 
 ### 8. Commits/PR - Bitbucket Integration
-**Status:** Partial - Read operations complete, write operations pending
+**Status:** Complete for PoC ✅ (API commit creation intentionally not needed)
 
 **Bitbucket Server (Completed):**
 - [x] Repository listing (with project hierarchy)
-- [x] Branch listing
+- [x] Branch listing, creation, deletion
 - [x] File content retrieval
 - [x] Directory listing (with nested path handling)
 - [x] PR diff fetching (with pagination support)
 - [x] PR files listing
 - [x] Authentication with tokens and custom headers
-- [x] Response caching for authenticated users
-- [x] Commit history retrieval (list_commits at line 493)
+- [x] Response caching for authenticated users (APIResponseCache)
+- [x] Commit history retrieval
+- [x] PR creation (`create_pull_request()` — real POST to Bitbucket API)
+- [x] PR status check (`get_pull_request_status()`)
+- [x] `from_branch` field in normalized PR data (used for commit deduplication)
 
-**Bitbucket Server (Remaining):**
-- [ ] Commit creation
-  - `create_commit()` exists but raises NotImplementedError (line 514-516)
-  - Need: Implement Bitbucket Server file update API
-- [ ] PR creation
-  - Add `create_pull_request()` method
-  - Support title, description, source/target branches
-- [ ] PR update/merge operations
+**Notes:**
+- `create_commit()` raises NotImplementedError intentionally — commits are created via
+  git worktree (subprocess git commands), not via the Bitbucket Files API
+
+**Remaining (nice-to-have):**
+- [ ] PR update/merge operations via API
+- [ ] Comment posting to Bitbucket PRs
 
 **GitHub (Future):**
 - [ ] GitHub provider implementation
 - [ ] OAuth authentication
-- [ ] Repository operations
-- [ ] Commit and PR creation
-- [ ] GitHub Actions integration
+- [ ] Repository/PR operations
 
 ---
 
 ## 🟡 MEDIUM PRIORITY - Enhancements
 
+### Full-Text Search
+**Status:** Not Implemented ❌
+
+- No search endpoint in backend (zero references)
+- No search UI in frontend
+- Need: Index file content, expose `/api/search/` endpoint, add search UI
+
+### Guest Commenter System
+**Status:** Role exists, no special features ⚠️
+
+- [x] Guest role defined in types and user model
+- [ ] Token-based anonymous commenting (no account required)
+- [ ] Public share links for guest access
+- Currently guest is just a permission level, not a special commenter flow
+
 ---
 
 ## 🟢 LOW PRIORITY - Optional Features
 
-### 9. SSO/OIDC Authentication (6-8 hours)
-**Status:** Stub - Returns 501 Not Implemented
+### 9. SSO/OIDC Authentication
+**Status:** Stub — returns 501 Not Implemented
 
-**Backend Tasks:**
-- [x] SSO endpoint stubs created (auth_views.py:132-163)
-- [x] OpenAPI schema documentation for SSO endpoints
-- [ ] Implement `sso_login_view()` logic
-  - File: `src/backend/src/users/auth_views.py:132-140`
-  - Currently returns 501 with "SSO not yet implemented"
-  - Use: Authlib OIDC client
-  - Generate authorization URL
-  - Redirect to SSO provider
-
-- [ ] Implement `sso_callback_view()` logic
-  - File: `src/backend/src/users/auth_views.py:155-163`
-  - Currently returns 501 with "SSO not yet implemented"
-  - Exchange authorization code for tokens
-  - Validate ID token
-  - Create/update user
-  - Establish session
-
-- [ ] Add SSO configuration
-  - Environment variables for OIDC settings
-  - Client ID, secret, discovery URL
-  - Callback URL configuration
-
-**Frontend Tasks:**
-- [ ] Add "Login with SSO" button
-- [ ] Handle SSO redirect flow
-- [ ] Store SSO session
-
-**Testing:**
-- [ ] Test SSO login flow
-- [ ] Test callback handling
-- [ ] Test user creation/update
-- [ ] Test token validation
+- [x] SSO endpoint stubs created (`auth_views.py`)
+- [ ] `sso_login_view()`: generates OIDC authorization URL (currently 501)
+- [ ] `sso_callback_view()`: exchanges code for tokens, creates user (currently 501)
+- [ ] OIDC environment config (client ID, secret, discovery URL)
+- [ ] Frontend "Login with SSO" button and redirect flow
 
 ---
 
 ## 🔵 ENHANCEMENTS - Nice to Have
-
-### 4. Advanced Features (Optional)
 
 **Keyboard Shortcuts:**
 - [ ] Cmd+E - Toggle edit mode
 - [ ] Cmd+S - Save changes
 - [ ] Cmd+/ - Toggle comments panel
 - [ ] Cmd+F - Search in file
-- [ ] Cmd+G - Jump to line
-
-**Search & Navigation:**
-- [ ] Search within file
-- [ ] Jump to line number
-- [ ] Symbol navigation (functions, classes)
-- [ ] Breadcrumb navigation
 
 **Collaboration:**
 - [ ] Real-time updates (WebSocket)
 - [ ] Show who's viewing/editing
-- [ ] Live cursor positions
-- [ ] Conflict detection
+- [ ] Conflict resolution: user choice of winner (not just auto-layering)
 
 **Diff Enhancements:**
-- [ ] Syntax highlighting in diffs
 - [ ] Word-level diff highlighting
-- [ ] Ignore whitespace option
+- [ ] Syntax highlighting in diff hunks
 - [ ] Diff statistics visualization
 
 **Comment Enhancements:**
 - [ ] Rich text comments (markdown)
-- [ ] @mentions with notifications
-- [ ] Comment reactions (emoji)
-- [ ] Comment search
+- [ ] @mentions
+- [ ] Comment reactions
 
 ---
 
 ## 📋 TECHNICAL DEBT
 
+### Legacy Code
+- [ ] Remove or connect old `UserChange` approve/reject/commit_batch flow
+  - `views_user_changes.py`: DB-only status changes, never commits to git
+  - New system: UserDraftChange → UserBranch → git commit (views_draft_changes.py)
+  - The old DiffViewer Accept/Reject buttons log to console only
+
 ### Data Model
 - [ ] Migrate User model to UUID primary key
-  - Currently using Django's default User model with integer IDs
-  - All other models (FileComment, Space, Document) use UUIDs
-  - Would require custom User model and complex migration
-  - Low priority - current setup works fine
+  - Currently using Django default integer IDs; all other models use UUIDs
 
 ### Code Quality
-- [ ] Add JSDoc comments to all public functions
-- [ ] Add Python docstrings to all public methods
 - [ ] Remove console.log statements from production code
 - [ ] Add error boundaries in React components
+- [ ] Type all `any` usages in enrichment data paths
 
 ### Performance
-- [ ] Implement virtual scrolling for large files
-- [ ] Add pagination for large diff hunks
-- [ ] Cache enrichment responses
-- [ ] Optimize re-renders in CodeRenderer
+- [ ] Virtual scrolling for large files
+- [ ] Pagination for large diff hunks
+- [ ] Optimize re-renders in file viewer on enrichment updates
 
 ### Security
-- [ ] Add CSRF protection for state-changing operations
-- [ ] Implement rate limiting on API endpoints
-- [ ] Add input validation for all user inputs
-- [ ] Sanitize markdown content
+- [ ] CSRF protection for state-changing operations
+- [ ] Rate limiting on API endpoints
+- [ ] Input validation / markdown sanitization
 
 ---
 
-## 🧪 TESTING GAPS (See TESTING_TODO.md for details)
+## 🧪 TESTING GAPS
 
-### Backend Integration Tests Needed
-- [ ] User changes approve/reject workflow
-- [ ] Enrichment filtering edge cases
-- [ ] Git commit creation
+### Backend
+- [ ] Integration tests for git commit/push/rebase flow
+- [ ] UserBranch status transitions (ACTIVE → PR_OPEN → ABANDONED)
+- [ ] Conflict detection in VirtualContentBuilder edge cases
 - [ ] Large file handling
 - [ ] Concurrent edit detection
 
-### Frontend Tests Needed
-- [ ] Component unit tests
-- [ ] Integration tests with mock API
-- [ ] E2E tests with Playwright
+### Frontend
+- [ ] Component unit tests for SpaceWorkspaceBar
+- [ ] VirtualContentBuilder conflict detection unit tests
+- [ ] E2E tests for commit/PR creation flow
 - [ ] Accessibility tests
 
 ---
 
 ## 📚 DOCUMENTATION
 
-### User Documentation
-- [ ] Getting started guide
-- [ ] User manual for editing workflow
-- [ ] Comment system guide
-- [ ] Diff review guide
-
-### Developer Documentation
-- [ ] Architecture overview
+- [ ] Architecture overview (enrichment system, virtual content layering)
+- [ ] Git workflow documentation (UserDraftChange → UserBranch → PR)
 - [ ] API documentation (OpenAPI/Swagger)
-- [ ] Enrichment provider development guide
 - [ ] Deployment guide
-
-### Code Documentation
-- [ ] README for each major component
-- [ ] Inline code comments
-- [ ] Type definitions documentation
-- [ ] Configuration examples
-
+- [ ] Enrichment provider development guide

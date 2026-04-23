@@ -28,7 +28,7 @@ export default function SpaceTree({
       try {
         const mappingsData = await fileMappingApi.list(space.slug);
         const mappingsMap = new Map<string, FileMapping>();
-        mappingsData.forEach(m => mappingsMap.set(m.file_path, m));
+        mappingsData.forEach(m => mappingsMap.set(m.file_path.replace(/\/$/, ''), m));
         setMappings(mappingsMap);
       } catch (error) {
         console.error('Failed to load mappings:', error);
