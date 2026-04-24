@@ -113,6 +113,23 @@ export async function rebaseBranch(
   });
 }
 
+export async function renameTask(branchId: string, name: string): Promise<UserTaskInfo> {
+  return apiClient.request<UserTaskInfo>(`${API_BASE}/user-branch/rename-task/`, {
+    method: 'POST',
+    body: JSON.stringify({ branch_id: branchId, name }),
+  });
+}
+
+export async function deletePr(
+  spaceId: string,
+  branchId?: string
+): Promise<{ deleted: boolean; branch_name: string }> {
+  return apiClient.request(`${API_BASE}/user-branch/delete-pr/`, {
+    method: 'POST',
+    body: JSON.stringify({ space_id: spaceId, branch_id: branchId }),
+  });
+}
+
 // ── Legacy: kept for backward compat ─────────────────────────────────────────
 
 /** @deprecated Use getWorkspace() instead */

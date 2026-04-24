@@ -14,6 +14,7 @@ import {
   Plus,
   Minus,
   Edit3,
+  Pencil,
   Loader2,
   CheckCircle2,
   Circle,
@@ -29,6 +30,8 @@ import {
   discardBranch,
   unstageBranch,
   rebaseBranch,
+  renameTask,
+  deletePr,
   type UserTaskInfo,
   type WorkspaceResponse,
 } from '../../services/userBranchApi';
@@ -122,10 +125,13 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const [currentStep, setCurrentStep] = useState<string | null>(null);
     const [confirm, setConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null);
+    const [isRenamingTask, setIsRenamingTask] = useState(false);
+    const [renameValue, setRenameValue] = useState('');
     const logsEndRef = useRef<HTMLDivElement>(null);
     const stepClearTimer = useRef<ReturnType<typeof setTimeout>>();
     const dropdownRef = useRef<HTMLDivElement>(null);
     const newTaskInputRef = useRef<HTMLInputElement>(null);
+    const renameInputRef = useRef<HTMLInputElement>(null);
 
     const addLog = useCallback((message: string, level: LogEntry['level'] = 'info') => {
       const now = new Date();
@@ -194,6 +200,13 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
         setTimeout(() => newTaskInputRef.current?.focus(), 50);
       }
     }, [showNewTaskForm]);
+
+    // Focus rename input when rename mode is entered
+    useEffect(() => {
+      if (isRenamingTask) {
+        setTimeout(() => renameInputRef.current?.focus(), 50);
+      }
+    }, [isRenamingTask]);
 
     if (!space.edit_enabled || !workspace) {
       return null;
@@ -348,6 +361,55 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
       });
     };
 
+    const handleRenameTask = async () => {
+      if (!selectedTask) {
+        setIsRenamingTask(false);
+        return;
+      }
+      const trimmed = renameValue.trim();
+      if (!trimmed || trimmed === selectedTask.name) {
+        setIsRenamingTask(false);
+        return;
+      }
+      setIsLoading(true);
+      setError(null);
+      try {
+        await renameTask(selectedTask.id, trimmed);
+        addLog(`Renamed task to "${trimmed}"`, 'success');
+        setIsRenamingTask(false);
+        await loadWorkspace();
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Failed to rename task';
+        setError(msg);
+        addLog(`Error: ${msg}`, 'error');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    const handleDeletePr = () => {
+      askConfirm(
+        `Delete PR for workspace "${selectedTask?.name}"? The branch commits will be preserved.`,
+        async () => {
+          setIsLoading(true);
+          setError(null);
+          addLog(`Deleting PR for ${selectedTask?.branch_name}…`);
+          try {
+            await deletePr(space.id, selectedTask?.id);
+            addLog('PR deleted', 'success');
+            await loadWorkspace();
+            onRefresh?.();
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Failed to delete PR';
+            setError(msg);
+            addLog(`Error: ${msg}`, 'error');
+          } finally {
+            setIsLoading(false);
+          }
+        }
+      );
+    };
+
     const handleRebase = async () => {
       setIsLoading(true);
       setError(null);
@@ -429,30 +491,56 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
 
             {/* Task selector button */}
             <div className="relative" ref={dropdownRef}>
-              <button
-                onClick={() => {
-                  setShowTaskDropdown(v => !v);
-                  setShowNewTaskForm(false);
-                }}
-                className="flex items-center gap-1.5 text-sm font-medium px-2 py-1 rounded hover:opacity-80"
-                style={{
-                  backgroundColor: 'rgba(0,0,0,0.06)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid rgba(0,0,0,0.12)',
-                }}
-              >
-                {selectedTask ? (
-                  <>
-                    <span className="truncate" style={{ maxWidth: 180 }}>
-                      {selectedTask.name || selectedTask.branch_name}
-                    </span>
-                    <TaskStatusBadge task={selectedTask} />
-                  </>
-                ) : (
-                  <span style={{ color: 'var(--text-secondary)' }}>Select workspace…</span>
-                )}
-                <ChevronDown size={12} />
-              </button>
+              {isRenamingTask && selectedTask ? (
+                <input
+                  ref={renameInputRef}
+                  type="text"
+                  value={renameValue}
+                  onChange={e => setRenameValue(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      handleRenameTask();
+                    }
+                    if (e.key === 'Escape') {
+                      setIsRenamingTask(false);
+                    }
+                  }}
+                  onBlur={handleRenameTask}
+                  className="text-sm font-medium px-2 py-1 rounded"
+                  style={{
+                    border: '1px solid #1976d2',
+                    backgroundColor: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
+                    width: 200,
+                    outline: 'none',
+                  }}
+                />
+              ) : (
+                <button
+                  onClick={() => {
+                    setShowTaskDropdown(v => !v);
+                    setShowNewTaskForm(false);
+                  }}
+                  className="flex items-center gap-1.5 text-sm font-medium px-2 py-1 rounded hover:opacity-80"
+                  style={{
+                    backgroundColor: 'rgba(0,0,0,0.06)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid rgba(0,0,0,0.12)',
+                  }}
+                >
+                  {selectedTask ? (
+                    <>
+                      <span className="truncate" style={{ maxWidth: 180 }}>
+                        {selectedTask.name || selectedTask.branch_name}
+                      </span>
+                      <TaskStatusBadge task={selectedTask} />
+                    </>
+                  ) : (
+                    <span style={{ color: 'var(--text-secondary)' }}>Select workspace…</span>
+                  )}
+                  <ChevronDown size={12} />
+                </button>
+              )}
 
               {/* Dropdown */}
               {showTaskDropdown && (
@@ -572,6 +660,22 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
               )}
             </div>
 
+            {/* Rename pencil icon for selected task */}
+            {selectedTask && !isRenamingTask && (
+              <button
+                onClick={() => {
+                  setRenameValue(selectedTask.name || selectedTask.branch_name);
+                  setIsRenamingTask(true);
+                  setShowTaskDropdown(false);
+                }}
+                className="p-1 rounded hover:opacity-80"
+                style={{ color: 'var(--text-secondary)' }}
+                title="Rename task"
+              >
+                <Pencil size={12} />
+              </button>
+            )}
+
             {/* Quick "new task" shortcut when no tasks exist */}
             {tasks.length === 0 && !showNewTaskForm && (
               <button
@@ -652,17 +756,29 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
                 </a>
               )}
 
-              {hasBranch && !selectedTask?.pr_url && !hasConflicts && (
-                <button
-                  onClick={() => setShowPrForm(v => !v)}
-                  disabled={isLoading}
-                  className="flex items-center gap-1 px-2 py-1 text-xs rounded disabled:opacity-50"
-                  style={{ backgroundColor: '#1976d2', color: 'white' }}
-                >
-                  <GitPullRequest size={12} />
-                  Create PR
-                </button>
-              )}
+              {hasBranch &&
+                !hasConflicts &&
+                (isPrOpen ? (
+                  <button
+                    onClick={handleDeletePr}
+                    disabled={isLoading}
+                    className="flex items-center gap-1 px-2 py-1 text-xs rounded disabled:opacity-50"
+                    style={{ backgroundColor: '#dc2626', color: 'white' }}
+                  >
+                    <GitPullRequest size={12} />
+                    Delete PR
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setShowPrForm(v => !v)}
+                    disabled={isLoading}
+                    className="flex items-center gap-1 px-2 py-1 text-xs rounded disabled:opacity-50"
+                    style={{ backgroundColor: '#1976d2', color: 'white' }}
+                  >
+                    <GitPullRequest size={12} />
+                    Create PR
+                  </button>
+                ))}
 
               {hasBranch && (
                 <button
@@ -802,7 +918,17 @@ export const SpaceWorkspaceBar = forwardRef<SpaceWorkspaceBarHandle, SpaceWorksp
                 >
                   {selectedTask.branch_name}
                 </span>
-                {!selectedTask.pr_url && (
+                {isPrOpen ? (
+                  <button
+                    disabled={isLoading}
+                    onClick={handleDeletePr}
+                    className="flex items-center gap-1 px-2 py-0.5 text-xs rounded disabled:opacity-50"
+                    style={{ backgroundColor: '#dc2626', color: 'white' }}
+                  >
+                    <GitPullRequest size={11} />
+                    Delete PR
+                  </button>
+                ) : (
                   <button
                     disabled={isLoading}
                     onClick={() => setShowPrForm(v => !v)}

@@ -8,7 +8,11 @@ import {
   GitCommit,
   Pencil,
 } from 'lucide-react';
-import { enrichmentApi, type EnrichmentsResponse } from '../../services/enrichmentApi';
+import {
+  enrichmentApi,
+  streamEnrichments,
+  type EnrichmentsResponse,
+} from '../../services/enrichmentApi';
 import type { Space } from '../../types';
 import { apiClient } from '../../services/apiClient';
 import { fileMappingApi, type FileMapping } from '../../services/fileMappingApi';
@@ -749,6 +753,9 @@ function FileContentView({
   const [mappings, setMappings] = useState<Map<string, FileMapping>>(new Map());
   const [breadcrumbPath, setBreadcrumbPath] = useState<string>('');
   const { saveChange } = useDraftChanges();
+  // Stable ref so loadEnrichments can call onLog without adding it to deps
+  const onLogRef = useRef(onLog);
+  onLogRef.current = onLog;
 
   // Load file mappings
   useEffect(() => {
@@ -788,28 +795,30 @@ function FileContentView({
     setBreadcrumbPath(mappedParts.join(' / '));
   }, [file, mappings]);
 
-  // Load enrichments function
+  // Load enrichments function — uses streaming endpoint so PR-check progress
+  // appears as live messages in SpaceWorkspaceBar.
   const loadEnrichments = useCallback(async () => {
     if (!file) {
       return;
     }
 
     try {
-      console.log('[FileContentView] Loading enrichments for:', {
-        file: file.path,
-        sourceUri,
-      });
-      const response = await enrichmentApi.getEnrichments(sourceUri);
-      console.log('[FileContentView] Loaded enrichments:', {
-        comments: Array.isArray(response.comments) ? response.comments.length : 0,
-        pr_diff: Array.isArray(response.pr_diff) ? response.pr_diff.length : 0,
-        diff: Array.isArray(response.diff) ? response.diff.length : 0,
-        local_changes: Array.isArray(response.local_changes) ? response.local_changes.length : 0,
-        raw: response,
+      const response = await streamEnrichments(sourceUri, msg => {
+        onLogRef.current?.(msg);
       });
       setEnrichments(response || {});
+      // Replace the last lingering progress message with a brief success note
+      // (success level clears in 5s vs 30s for info).
+      const prCount = (response?.pr_diff ?? []).length;
+      onLogRef.current?.(
+        prCount > 0
+          ? `Enrichments loaded — ${prCount} matching PR${prCount !== 1 ? 's' : ''}`
+          : 'Enrichments loaded',
+        'success'
+      );
     } catch (error) {
       console.error('[FileContentView] Failed to load enrichments:', error);
+      onLogRef.current?.('Failed to load enrichments', 'error');
       setEnrichments({});
     }
   }, [file, sourceUri]);

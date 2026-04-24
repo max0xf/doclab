@@ -292,3 +292,48 @@ describe('VirtualContentBuilder — PR: stats fields', () => {
     expect(vc.enrichmentsByType.get(EnrichmentType.PR)).toHaveLength(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// PR: single hunk with two change groups separated by context
+// (regression: second group must also get isFirstInDiffGroup=true)
+// ---------------------------------------------------------------------------
+
+describe('VirtualContentBuilder — PR: hunk with two separate change groups', () => {
+  // Content: line1..line6
+  // Hunk: replace line2, context line3, replace line4
+  const LINES6 = ['line1', 'line2', 'line3', 'line4', 'line5', 'line6'];
+  const hunk = makeHunk(2, 3, 2, 3, ['-line2', '+line2-pr', ' line3', '-line4', '+line4-pr']);
+  const vc = buildVirtualContent(makeContent(LINES6), [makePREnrichment(hunk)]);
+
+  it('first deletion (line2) is isFirstInDiffGroup', () => {
+    const del = vc.finalLines.find(l => l.content === 'line2');
+    expect(del?.isFirstInDiffGroup).toBe(true);
+  });
+
+  it('first addition (line2-pr) is NOT isFirstInDiffGroup', () => {
+    const add = vc.finalLines.find(l => l.content === 'line2-pr');
+    expect(add?.isFirstInDiffGroup).toBe(false);
+  });
+
+  it('second deletion (line4) is isFirstInDiffGroup', () => {
+    const del = vc.finalLines.find(l => l.content === 'line4');
+    expect(del?.isFirstInDiffGroup).toBe(true);
+  });
+
+  it('second addition (line4-pr) is NOT isFirstInDiffGroup', () => {
+    const add = vc.finalLines.find(l => l.content === 'line4-pr');
+    expect(add?.isFirstInDiffGroup).toBe(false);
+  });
+
+  it('both deletions carry prNumber', () => {
+    const del2 = vc.finalLines.find(l => l.content === 'line2');
+    const del4 = vc.finalLines.find(l => l.content === 'line4');
+    expect(del2?.prNumber).toBe(PR_NUMBER);
+    expect(del4?.prNumber).toBe(PR_NUMBER);
+  });
+
+  it('original lines line1, line3, line5, line6 are preserved', () => {
+    const origContents = vc.finalLines.filter(l => l.isOriginalLine).map(l => l.content);
+    expect(origContents).toEqual(['line1', 'line3', 'line5', 'line6']);
+  });
+});

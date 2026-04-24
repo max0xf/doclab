@@ -200,6 +200,9 @@ export class VirtualContentBuilder {
 
         if (prefix === ' ') {
           // Context: emit the original prevLayer line as-is.
+          // A context line also resets the diff-group boundary so the next
+          // diff line in this hunk (if any) gets isFirstInDiffGroup=true.
+          isFirstDiffLine = true;
           if (prevIdx < previousLayer.lines.length) {
             const pl = previousLayer.lines[prevIdx];
             newLines.push({

@@ -294,6 +294,10 @@ export function FileViewer({
       await onSave(editedContent, '');
       setIsDirty(false);
       setIsEditMode(false);
+      // Reload enrichments so the updated edit diff is reflected immediately.
+      // Without this the UI keeps showing stale conflict data even after the
+      // backend has corrected the edit enrichment.
+      onEnrichmentsReload?.();
     } catch (error) {
       console.error('Save failed:', error);
       alert('Failed to save changes. Please try again.');
@@ -386,8 +390,11 @@ export function FileViewer({
 
   // Select appropriate content widget
   const renderContentWidget = () => {
-    // In edit mode, use editedContent; otherwise use displayContent (which includes pending changes)
-    const contentToShow = isEditMode ? editedContent : displayContent;
+    // Always pass the original content so the VirtualContentBuilder applies enrichments
+    // (including edit_session diffs) against the correct baseline. Passing editedContent
+    // here would cause the edit enrichment to be applied a second time on top of already-
+    // modified content, producing duplicate diff lines.
+    const contentToShow = displayContent;
 
     const widgetProps = {
       fileName,

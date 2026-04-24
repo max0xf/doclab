@@ -162,6 +162,62 @@ export async function getEnrichments(
 }
 
 /**
+ * Stream enrichments for a source URI.
+ * Fires `onProgress(message)` for each progress event from the backend,
+ * then resolves with the final EnrichmentsResponse.
+ */
+export async function streamEnrichments(
+  sourceUri: string,
+  onProgress?: (message: string) => void
+): Promise<EnrichmentsResponse> {
+  const params = new URLSearchParams({ source_uri: sourceUri });
+  const url = `/api/enrichments/v1/enrichments/stream/?${params.toString()}`;
+
+  const response = await fetch(url, { credentials: 'include' });
+  if (!response.ok || !response.body) {
+    throw new Error(`Enrichment stream failed: ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result: EnrichmentsResponse = {};
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      buffer += decoder.decode(value, { stream: true });
+
+      let newlineIdx: number;
+      while ((newlineIdx = buffer.indexOf('\n')) !== -1) {
+        const line = buffer.slice(0, newlineIdx).trim();
+        buffer = buffer.slice(newlineIdx + 1);
+        if (!line) {
+          continue;
+        }
+        try {
+          const event = JSON.parse(line) as { type: string; message?: string; data?: any };
+          if (event.type === 'progress' && event.message) {
+            onProgress?.(event.message);
+          } else if (event.type === 'complete' && event.data) {
+            result = event.data as EnrichmentsResponse;
+          }
+        } catch {
+          // ignore malformed lines
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return result;
+}
+
+/**
  * Get enrichments of a specific type for a source URI.
  */
 export async function getEnrichmentsByType(

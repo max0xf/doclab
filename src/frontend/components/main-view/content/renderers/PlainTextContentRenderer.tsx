@@ -1,18 +1,77 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Pencil, GitCommit, AlertTriangle } from 'lucide-react';
-import { Enrichment, LayeredVirtualContent, VirtualLine, DiffType } from '../virtual-content/types';
+import {
+  Enrichment,
+  LayeredVirtualContent,
+  VirtualLine,
+  DiffType,
+  EnrichmentType,
+} from '../virtual-content/types';
 import { ConflictDetailsDialog } from './ConflictDetailsDialog';
 
 interface PlainTextContentRendererProps {
   virtualContent: LayeredVirtualContent;
   onLineClick?: (lineNumber: number) => void;
   onEnrichmentClick?: (enrichment: any) => void;
+  isEditMode?: boolean;
+  onLineContentChange?: (virtualLineNumber: number, newContent: string) => void;
+}
+
+// Editable line component used in edit mode.
+// Manages its own DOM via a ref so React never overwrites the user's typed content
+// between re-renders (React has no children to reconcile against).
+function EditableLine({
+  content,
+  virtualLineNumber,
+  className,
+  style,
+  onContentChange,
+}: {
+  content: string;
+  virtualLineNumber: number;
+  className?: string;
+  style?: React.CSSProperties;
+  onContentChange: (virtualLineNumber: number, newContent: string) => void;
+}) {
+  const ref = useRef<HTMLPreElement>(null);
+  const isEditingRef = useRef(false);
+
+  // Set initial content imperatively on mount; don't overwrite while user is typing.
+  useEffect(() => {
+    if (ref.current && !isEditingRef.current) {
+      ref.current.innerText = content;
+    }
+  }, [content]);
+
+  return (
+    <pre
+      ref={ref}
+      contentEditable
+      suppressContentEditableWarning
+      className={className}
+      style={{ ...style, outline: 'none', cursor: 'text', minHeight: '1.2em' }}
+      onFocus={() => {
+        isEditingRef.current = true;
+      }}
+      onBlur={() => {
+        isEditingRef.current = false;
+      }}
+      onInput={e => {
+        // Browsers add a trailing newline to contenteditable for cursor positioning;
+        // strip it so a single Enter doesn't introduce a double blank line.
+        const text = e.currentTarget.innerText.replace(/\n$/, '');
+        onContentChange(virtualLineNumber, text);
+      }}
+    />
+  );
 }
 
 export const PlainTextContentRenderer: React.FC<PlainTextContentRendererProps> = ({
   virtualContent,
   onLineClick,
   onEnrichmentClick,
+  isEditMode,
+  onLineContentChange,
 }) => {
   const [conflictDialog, setConflictDialog] = useState<{
     conflicts: Enrichment[];
@@ -34,7 +93,6 @@ export const PlainTextContentRenderer: React.FC<PlainTextContentRendererProps> =
 
     const commentEnrichments = vLine.enrichments.filter(e => e.type === 'comment');
     const conflictEnrichments = vLine.enrichments.filter(e => e.type === 'conflict');
-    // Only show the conflict badge on the first line of each conflict block.
     const firstLineConflicts = conflictEnrichments.filter(ce => vLine.lineNumber === ce.lineStart);
 
     let backgroundColor = 'transparent';
@@ -57,12 +115,24 @@ export const PlainTextContentRenderer: React.FC<PlainTextContentRendererProps> =
       showCommitBadge ||
       showEditBadge;
 
+    // A line is editable in edit mode when it contributes to the draft modified content:
+    // original lines that weren't deleted, and lines added by the edit_session enrichment.
+    const isEditable = !!(
+      isEditMode &&
+      !isDeletion &&
+      (!vLine.isInsertedLine || vLine.sourceEnrichment?.type === EnrichmentType.EDIT)
+    );
+
     return (
       <div
         key={vLine.virtualLineNumber}
-        className="flex items-start hover:bg-gray-50 group"
-        style={{ backgroundColor }}
-        onClick={() => onLineClick?.(vLine.lineNumber)}
+        className="flex items-start group"
+        style={{
+          backgroundColor,
+          // Subtle hover only when not editable (editable lines use cursor:text)
+          cursor: isEditable ? 'text' : undefined,
+        }}
+        onClick={!isEditMode ? () => onLineClick?.(vLine.lineNumber) : undefined}
       >
         {/* Line numbers */}
         <div className="flex-shrink-0 flex">
@@ -82,12 +152,22 @@ export const PlainTextContentRenderer: React.FC<PlainTextContentRendererProps> =
 
         {/* Content + inline badges */}
         <div className="flex-1 px-4 py-1 flex items-start gap-4 min-w-0">
-          <pre
-            className="flex-1 m-0 whitespace-pre-wrap break-words text-sm min-w-0"
-            style={{ fontFamily: 'monospace' }}
-          >
-            {vLine.content}
-          </pre>
+          {isEditable ? (
+            <EditableLine
+              content={vLine.content}
+              virtualLineNumber={vLine.virtualLineNumber}
+              className="flex-1 m-0 whitespace-pre-wrap break-words text-sm min-w-0"
+              style={{ fontFamily: 'monospace' }}
+              onContentChange={onLineContentChange!}
+            />
+          ) : (
+            <pre
+              className="flex-1 m-0 whitespace-pre-wrap break-words text-sm min-w-0"
+              style={{ fontFamily: 'monospace' }}
+            >
+              {vLine.content}
+            </pre>
+          )}
 
           {hasBadges && (
             <div className="flex-shrink-0 flex items-center gap-2 pt-0.5">
